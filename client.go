@@ -19,12 +19,24 @@ const (
 	userAgent      = "dotenv-go-sdk/1.0.0"
 )
 
+// AuthType represents the authentication method
+type AuthType int
+
+const (
+	// AuthTypeAPIKey uses organization API key authentication
+	AuthTypeAPIKey AuthType = iota
+	// AuthTypeBearer uses OAuth2 bearer token authentication
+	AuthTypeBearer
+)
+
 // Client manages communication with the DotEnv API
 type Client struct {
-	baseURL    *url.URL
-	apiKey     string
-	httpClient *http.Client
-	userAgent  string
+	baseURL     *url.URL
+	apiKey      string      // Organization API key
+	bearerToken string      // OAuth2 access token
+	authType    AuthType    // Authentication method
+	httpClient  *http.Client
+	userAgent   string
 
 	// Service endpoints
 	Organizations *OrganizationsService
@@ -73,8 +85,24 @@ func WithInsecureSkipVerify() ClientOption {
 	}
 }
 
-// NewClient creates a new DotEnv API client
-func NewClient(apiKey string, opts ...ClientOption) *Client {
+// WithAPIKey sets the organization API key for authentication
+func WithAPIKey(apiKey string) ClientOption {
+	return func(c *Client) {
+		c.apiKey = apiKey
+		c.authType = AuthTypeAPIKey
+	}
+}
+
+// WithBearerToken sets the OAuth2 bearer token for authentication
+func WithBearerToken(token string) ClientOption {
+	return func(c *Client) {
+		c.bearerToken = token
+		c.authType = AuthTypeBearer
+	}
+}
+
+// NewClient creates a new DotEnv API client with options
+func NewClient(opts ...ClientOption) *Client {
 	baseURL, _ := url.Parse(defaultBaseURL)
 
 	// Create HTTP client with proper defaults
@@ -91,9 +119,9 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 
 	c := &Client{
 		baseURL:    baseURL,
-		apiKey:     apiKey,
 		httpClient: httpClient,
 		userAgent:  userAgent,
+		authType:   AuthTypeAPIKey, // Default to API key auth
 	}
 
 	// Apply options
@@ -110,6 +138,12 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 	c.Encryption = &EncryptionService{client: c}
 
 	return c
+}
+
+// NewClientWithAPIKey creates a new client with API key authentication (backward compatibility)
+func NewClientWithAPIKey(apiKey string, opts ...ClientOption) *Client {
+	allOpts := append([]ClientOption{WithAPIKey(apiKey)}, opts...)
+	return NewClient(allOpts...)
 }
 
 // NewRequest creates an API request
@@ -139,7 +173,18 @@ func (c *Client) NewRequest(ctx context.Context, method, urlStr string, body int
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
+	
+	// Set authentication header based on auth type
+	switch c.authType {
+	case AuthTypeBearer:
+		if c.bearerToken != "" {
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.bearerToken))
+		}
+	case AuthTypeAPIKey:
+		if c.apiKey != "" {
+			req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.apiKey))
+		}
+	}
 
 	return req, nil
 }
@@ -205,6 +250,26 @@ func checkResponse(r *http.Response) error {
 // APIKey returns the client's API key
 func (c *Client) APIKey() string {
 	return c.apiKey
+}
+
+// BearerToken returns the client's bearer token
+func (c *Client) BearerToken() string {
+	return c.bearerToken
+}
+
+// AuthType returns the client's authentication type
+func (c *Client) AuthType() AuthType {
+	return c.authType
+}
+
+// IsUsingAPIKey returns true if the client is using API key authentication
+func (c *Client) IsUsingAPIKey() bool {
+	return c.authType == AuthTypeAPIKey
+}
+
+// IsUsingBearer returns true if the client is using bearer token authentication
+func (c *Client) IsUsingBearer() bool {
+	return c.authType == AuthTypeBearer
 }
 
 // SetTLSSkipVerify enables or disables TLS certificate verification
