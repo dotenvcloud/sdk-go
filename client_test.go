@@ -42,9 +42,9 @@ func TestNewClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := dotenv.NewClient(tt.apiKey, tt.opts...)
+			opts := append([]dotenv.ClientOption{dotenv.WithAPIKey(tt.apiKey)}, tt.opts...)
+			client := dotenv.NewClient(opts...)
 			assert.NotNil(t, client)
-			assert.Equal(t, tt.apiKey, client.APIKey())
 		})
 	}
 }
@@ -78,7 +78,7 @@ func TestClient_Organizations_List(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := dotenv.NewClient("test-key", dotenv.WithBaseURL(server.URL))
+	client := dotenv.NewClient(dotenv.WithAPIKey("test-key"), dotenv.WithBaseURL(server.URL))
 
 	orgs, resp, err := client.Organizations.List(context.Background(), nil)
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestClient_Organizations_List(t *testing.T) {
 
 func TestClient_Projects_List(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/organizations/test-org/projects", r.URL.Path)
+		assert.Equal(t, "/api/v1/test-org/projects", r.URL.Path)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -120,9 +120,13 @@ func TestClient_Projects_List(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := dotenv.NewClient("test-key", dotenv.WithBaseURL(server.URL))
+	client := dotenv.NewClient(
+		dotenv.WithAPIKey("test-key"),
+		dotenv.WithBaseURL(server.URL),
+		dotenv.WithOrganization("test-org"),
+	)
 
-	projects, resp, err := client.Projects.List(context.Background(), "test-org", nil)
+	projects, resp, err := client.Projects.List(context.Background(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Len(t, projects, 1)
@@ -133,7 +137,7 @@ func TestClient_Projects_List(t *testing.T) {
 
 func TestClient_Secrets_GetProjectSecrets(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/my-project/secrets", r.URL.Path)
+		assert.Equal(t, "/api/v1/test-org/my-project/secrets", r.URL.Path)
 		assert.Equal(t, "production", r.URL.Query().Get("target"))
 		assert.Equal(t, "web", r.URL.Query().Get("environment"))
 
@@ -163,7 +167,11 @@ func TestClient_Secrets_GetProjectSecrets(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := dotenv.NewClient("test-key", dotenv.WithBaseURL(server.URL))
+	client := dotenv.NewClient(
+		dotenv.WithAPIKey("test-key"),
+		dotenv.WithBaseURL(server.URL),
+		dotenv.WithOrganization("test-org"),
+	)
 
 	secrets, resp, err := client.Secrets.GetProjectSecrets(context.Background(), "my-project", "production", "web")
 	require.NoError(t, err)
@@ -175,7 +183,7 @@ func TestClient_Secrets_GetProjectSecrets(t *testing.T) {
 
 func TestClient_Encryption_GetKey(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/my-project/encryption-key", r.URL.Path)
+		assert.Equal(t, "/api/v1/test-org/my-project/encryption-key", r.URL.Path)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -196,7 +204,11 @@ func TestClient_Encryption_GetKey(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := dotenv.NewClient("test-key", dotenv.WithBaseURL(server.URL))
+	client := dotenv.NewClient(
+		dotenv.WithAPIKey("test-key"),
+		dotenv.WithBaseURL(server.URL),
+		dotenv.WithOrganization("test-org"),
+	)
 
 	key, resp, err := client.Encryption.GetEncryptionKey(context.Background(), "my-project")
 	require.NoError(t, err)
@@ -223,7 +235,7 @@ func TestClient_RetryLogic(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := dotenv.NewClient("test-key", dotenv.WithBaseURL(server.URL))
+	client := dotenv.NewClient(dotenv.WithAPIKey("test-key"), dotenv.WithBaseURL(server.URL))
 
 	_, resp, err := client.Organizations.List(context.Background(), nil)
 	require.NoError(t, err)
@@ -239,7 +251,7 @@ func TestClient_RateLimiting(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := dotenv.NewClient("test-key", dotenv.WithBaseURL(server.URL))
+	client := dotenv.NewClient(dotenv.WithAPIKey("test-key"), dotenv.WithBaseURL(server.URL))
 
 	_, _, err := client.Organizations.List(context.Background(), nil)
 	require.Error(t, err)
@@ -257,7 +269,7 @@ func TestClient_NotFound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := dotenv.NewClient("test-key", dotenv.WithBaseURL(server.URL))
+	client := dotenv.NewClient(dotenv.WithAPIKey("test-key"), dotenv.WithBaseURL(server.URL))
 
 	_, _, err := client.Projects.Get(context.Background(), "non-existent")
 	require.Error(t, err)
@@ -271,7 +283,7 @@ func TestClient_Unauthorized(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := dotenv.NewClient("invalid-key", dotenv.WithBaseURL(server.URL))
+	client := dotenv.NewClient(dotenv.WithAPIKey("invalid-key"), dotenv.WithBaseURL(server.URL))
 
 	_, _, err := client.Organizations.List(context.Background(), nil)
 	require.Error(t, err)
