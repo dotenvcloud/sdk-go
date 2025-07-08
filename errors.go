@@ -32,6 +32,13 @@ type (
 		Message string
 	}
 
+	// ErrForbidden indicates access is denied to a resource
+	ErrForbidden struct {
+		Resource string
+		ID       string
+		Action   string // e.g., "access", "modify", "delete"
+	}
+
 	// ErrRateLimited indicates rate limit exceeded
 	ErrRateLimited struct {
 		RetryAfter int
@@ -44,7 +51,10 @@ type (
 )
 
 func (e ErrNotFound) Error() string {
-	return fmt.Sprintf("%s with ID %s not found", e.Resource, e.ID)
+	if e.ID != "" {
+		return fmt.Sprintf("%s '%s' not found", e.Resource, e.ID)
+	}
+	return fmt.Sprintf("%s not found", e.Resource)
 }
 
 func (e ErrUnauthorized) Error() string {
@@ -52,6 +62,16 @@ func (e ErrUnauthorized) Error() string {
 		return e.Message
 	}
 	return "unauthorized"
+}
+
+func (e ErrForbidden) Error() string {
+	if e.Action != "" && e.ID != "" {
+		return fmt.Sprintf("forbidden: cannot %s %s '%s'", e.Action, e.Resource, e.ID)
+	}
+	if e.ID != "" {
+		return fmt.Sprintf("access denied to %s '%s'", e.Resource, e.ID)
+	}
+	return fmt.Sprintf("access denied to %s", e.Resource)
 }
 
 func (e ErrRateLimited) Error() string {
@@ -71,6 +91,12 @@ func IsNotFound(err error) bool {
 // IsUnauthorized checks if error is unauthorized
 func IsUnauthorized(err error) bool {
 	_, ok := err.(*ErrUnauthorized)
+	return ok
+}
+
+// IsForbidden checks if error is forbidden
+func IsForbidden(err error) bool {
+	_, ok := err.(*ErrForbidden)
 	return ok
 }
 

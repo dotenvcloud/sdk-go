@@ -13,7 +13,14 @@ type TargetsService struct {
 
 // List returns all targets for a project
 func (s *TargetsService) List(ctx context.Context, projectSlug string, opts *ListOptions) ([]*Target, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s/targets", projectSlug)
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	if projectSlug == "" {
+		return nil, nil, fmt.Errorf("project identifier cannot be empty")
+	}
+	
+	u := fmt.Sprintf("/api/v1/%s/%s/targets", s.client.organization, projectSlug)
 	u = addOptions(u, opts)
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
@@ -49,7 +56,10 @@ func (s *TargetsService) List(ctx context.Context, projectSlug string, opts *Lis
 
 // Get returns a single target
 func (s *TargetsService) Get(ctx context.Context, projectSlug, targetSlug string) (*Target, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s/targets/%s", projectSlug, targetSlug)
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s/%s", s.client.organization, projectSlug, targetSlug)
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
 	if err != nil {
@@ -78,7 +88,10 @@ func (s *TargetsService) Get(ctx context.Context, projectSlug, targetSlug string
 
 // Create creates a new target
 func (s *TargetsService) Create(ctx context.Context, projectSlug string, target *Target) (*Target, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s/targets", projectSlug)
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s/targets", s.client.organization, projectSlug)
 
 	// Wrap in JSON:API format
 	reqData := map[string]interface{}{
@@ -119,7 +132,10 @@ func (s *TargetsService) Create(ctx context.Context, projectSlug string, target 
 
 // Update updates an existing target
 func (s *TargetsService) Update(ctx context.Context, projectSlug, targetSlug string, target *Target) (*Target, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s/targets/%s", projectSlug, targetSlug)
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s/%s", s.client.organization, projectSlug, targetSlug)
 
 	// Wrap in JSON:API format
 	reqData := map[string]interface{}{
@@ -160,7 +176,10 @@ func (s *TargetsService) Update(ctx context.Context, projectSlug, targetSlug str
 
 // Delete deletes a target
 func (s *TargetsService) Delete(ctx context.Context, projectSlug, targetSlug string) (*http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s/targets/%s", projectSlug, targetSlug)
+	if s.client.organization == "" {
+		return nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s/%s", s.client.organization, projectSlug, targetSlug)
 
 	req, err := s.client.NewRequest(ctx, "DELETE", u, nil)
 	if err != nil {

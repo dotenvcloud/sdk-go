@@ -16,7 +16,11 @@ func BenchmarkClient_Organizations_List(b *testing.B) {
 	}))
 	defer server.Close()
 
-	client := dotenv.NewClient("test-key", dotenv.WithBaseURL(server.URL))
+	client := dotenv.NewClient(
+		dotenv.WithAPIKey("test-key"),
+		dotenv.WithBaseURL(server.URL),
+		dotenv.WithOrganization("test-org"),
+	)
 	ctx := context.Background()
 
 	b.ResetTimer()
@@ -121,7 +125,11 @@ func BenchmarkJSONParsing(b *testing.B) {
 	}))
 	defer server.Close()
 
-	client := dotenv.NewClient("test-key", dotenv.WithBaseURL(server.URL))
+	client := dotenv.NewClient(
+		dotenv.WithAPIKey("test-key"),
+		dotenv.WithBaseURL(server.URL),
+		dotenv.WithOrganization("test-org"),
+	)
 	ctx := context.Background()
 
 	b.ResetTimer()
@@ -140,7 +148,11 @@ func BenchmarkConcurrentRequests(b *testing.B) {
 	}))
 	defer server.Close()
 
-	client := dotenv.NewClient("test-key", dotenv.WithBaseURL(server.URL))
+	client := dotenv.NewClient(
+		dotenv.WithAPIKey("test-key"),
+		dotenv.WithBaseURL(server.URL),
+		dotenv.WithOrganization("test-org"),
+	)
 	ctx := context.Background()
 
 	b.RunParallel(func(pb *testing.PB) {

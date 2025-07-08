@@ -13,7 +13,17 @@ type EnvironmentsService struct {
 
 // List returns all environments for a project and target
 func (s *EnvironmentsService) List(ctx context.Context, projectSlug, targetSlug string, opts *ListOptions) ([]*Environment, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s/targets/%s/environments", projectSlug, targetSlug)
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	if projectSlug == "" {
+		return nil, nil, fmt.Errorf("project identifier cannot be empty")
+	}
+	if targetSlug == "" {
+		return nil, nil, fmt.Errorf("target identifier cannot be empty")
+	}
+	
+	u := fmt.Sprintf("/api/v1/%s/%s/%s/environments", s.client.organization, projectSlug, targetSlug)
 	u = addOptions(u, opts)
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
@@ -49,7 +59,10 @@ func (s *EnvironmentsService) List(ctx context.Context, projectSlug, targetSlug 
 
 // Get returns a single environment
 func (s *EnvironmentsService) Get(ctx context.Context, projectSlug, targetSlug, environmentSlug string) (*Environment, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s/targets/%s/environments/%s", projectSlug, targetSlug, environmentSlug)
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s/%s/%s", s.client.organization, projectSlug, targetSlug, environmentSlug)
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
 	if err != nil {
@@ -78,7 +91,10 @@ func (s *EnvironmentsService) Get(ctx context.Context, projectSlug, targetSlug, 
 
 // Create creates a new environment
 func (s *EnvironmentsService) Create(ctx context.Context, projectSlug, targetSlug string, environment *Environment) (*Environment, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s/targets/%s/environments", projectSlug, targetSlug)
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s/%s/environments", s.client.organization, projectSlug, targetSlug)
 
 	// Wrap in JSON:API format
 	reqData := map[string]interface{}{
@@ -119,7 +135,10 @@ func (s *EnvironmentsService) Create(ctx context.Context, projectSlug, targetSlu
 
 // Update updates an existing environment
 func (s *EnvironmentsService) Update(ctx context.Context, projectSlug, targetSlug, environmentSlug string, environment *Environment) (*Environment, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s/targets/%s/environments/%s", projectSlug, targetSlug, environmentSlug)
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s/%s/%s", s.client.organization, projectSlug, targetSlug, environmentSlug)
 
 	// Wrap in JSON:API format
 	reqData := map[string]interface{}{
@@ -160,7 +179,10 @@ func (s *EnvironmentsService) Update(ctx context.Context, projectSlug, targetSlu
 
 // Delete deletes an environment
 func (s *EnvironmentsService) Delete(ctx context.Context, projectSlug, targetSlug, environmentSlug string) (*http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s/targets/%s/environments/%s", projectSlug, targetSlug, environmentSlug)
+	if s.client.organization == "" {
+		return nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s/%s/%s", s.client.organization, projectSlug, targetSlug, environmentSlug)
 
 	req, err := s.client.NewRequest(ctx, "DELETE", u, nil)
 	if err != nil {

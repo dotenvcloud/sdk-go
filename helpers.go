@@ -3,6 +3,7 @@ package dotenv
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"reflect"
 	"strings"
@@ -102,4 +103,15 @@ func boolPtr(b bool) *bool {
 // intPtr returns a pointer to an int
 func intPtr(i int) *int {
 	return &i
+}
+
+// parseJSONResponse parses JSON from an HTTP response
+func parseJSONResponse(resp *http.Response, v interface{}) error {
+	if resp == nil || resp.Body == nil {
+		return fmt.Errorf("nil response or body")
+	}
+	defer resp.Body.Close()
+	
+	decoder := json.NewDecoder(resp.Body)
+	return decoder.Decode(v)
 }

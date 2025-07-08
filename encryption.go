@@ -18,7 +18,10 @@ type EncryptionService struct {
 
 // GetEncryptionKey retrieves the encryption key for a project
 func (s *EncryptionService) GetEncryptionKey(ctx context.Context, project string) (*EncryptionKey, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/%s/encryption-key", project)
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s/encryption-key", s.client.organization, project)
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
 	if err != nil {
@@ -47,7 +50,10 @@ func (s *EncryptionService) GetEncryptionKey(ctx context.Context, project string
 
 // RotateClientKeys initiates client-side key rotation
 func (s *EncryptionService) RotateClientKeys(ctx context.Context, project string) (*EncryptionKey, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/%s/secrets/rotate-client-keys", project)
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s/secrets/rotate-client-keys", s.client.organization, project)
 
 	req, err := s.client.NewRequest(ctx, "POST", u, nil)
 	if err != nil {

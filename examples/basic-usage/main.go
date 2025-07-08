@@ -16,14 +16,24 @@ func main() {
 		log.Fatal("DOTENV_API_KEY environment variable is required")
 	}
 
-	// Initialize client
-	client := dotenv.NewClient(apiKey)
+	// Get organization from environment
+	organization := os.Getenv("DOTENV_ORGANIZATION")
+	if organization == "" {
+		log.Fatal("DOTENV_ORGANIZATION environment variable is required")
+	}
+
+	// Initialize client with API key and organization
+	opts := []dotenv.ClientOption{
+		dotenv.WithAPIKey(apiKey),
+		dotenv.WithOrganization(organization),
+	}
 
 	// For development with https://dotenv.test
 	if os.Getenv("DOTENV_BASE_URL") != "" {
-		client = dotenv.NewClient(apiKey,
-			dotenv.WithBaseURL(os.Getenv("DOTENV_BASE_URL")))
+		opts = append(opts, dotenv.WithBaseURL(os.Getenv("DOTENV_BASE_URL")))
 	}
+
+	client := dotenv.NewClient(opts...)
 
 	ctx := context.Background()
 
@@ -41,7 +51,8 @@ func main() {
 	// Example 2: List projects
 	if len(orgs) > 0 {
 		fmt.Println("\n=== Projects ===")
-		projects, _, err := client.Projects.List(ctx, orgs[0].Slug, nil)
+		// Projects are listed for the organization set in the client
+		projects, _, err := client.Projects.List(ctx, nil)
 		if err != nil {
 			log.Printf("Error listing projects: %v", err)
 		} else {

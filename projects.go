@@ -11,9 +11,13 @@ type ProjectsService struct {
 	client *Client
 }
 
-// List returns all projects for an organization
-func (s *ProjectsService) List(ctx context.Context, organizationSlug string, opts *ListOptions) ([]*Project, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/organizations/%s/projects", organizationSlug)
+// List returns all projects for the organization
+func (s *ProjectsService) List(ctx context.Context, opts *ListOptions) ([]*Project, *http.Response, error) {
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	
+	u := fmt.Sprintf("/api/v1/%s/projects", s.client.organization)
 	u = addOptions(u, opts)
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
@@ -49,7 +53,10 @@ func (s *ProjectsService) List(ctx context.Context, organizationSlug string, opt
 
 // Get returns a single project
 func (s *ProjectsService) Get(ctx context.Context, projectSlug string) (*Project, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s", projectSlug)
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s", s.client.organization, projectSlug)
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
 	if err != nil {
@@ -77,8 +84,11 @@ func (s *ProjectsService) Get(ctx context.Context, projectSlug string) (*Project
 }
 
 // Create creates a new project
-func (s *ProjectsService) Create(ctx context.Context, organizationSlug string, project *Project) (*Project, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/organizations/%s/projects", organizationSlug)
+func (s *ProjectsService) Create(ctx context.Context, project *Project) (*Project, *http.Response, error) {
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/projects", s.client.organization)
 
 	// Wrap in JSON:API format
 	reqData := map[string]interface{}{
@@ -119,7 +129,10 @@ func (s *ProjectsService) Create(ctx context.Context, organizationSlug string, p
 
 // Update updates an existing project
 func (s *ProjectsService) Update(ctx context.Context, projectSlug string, project *Project) (*Project, *http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s", projectSlug)
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s", s.client.organization, projectSlug)
 
 	// Wrap in JSON:API format
 	reqData := map[string]interface{}{
@@ -160,7 +173,10 @@ func (s *ProjectsService) Update(ctx context.Context, projectSlug string, projec
 
 // Delete deletes a project
 func (s *ProjectsService) Delete(ctx context.Context, projectSlug string) (*http.Response, error) {
-	u := fmt.Sprintf("/api/v1/projects/%s", projectSlug)
+	if s.client.organization == "" {
+		return nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	u := fmt.Sprintf("/api/v1/%s/%s", s.client.organization, projectSlug)
 
 	req, err := s.client.NewRequest(ctx, "DELETE", u, nil)
 	if err != nil {
