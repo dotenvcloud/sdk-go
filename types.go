@@ -34,13 +34,15 @@ type Project struct {
 
 // Target represents a deployment target
 type Target struct {
-	ID          string    `json:"id"`
-	ProjectID   string    `json:"project_id"`
-	Name        string    `json:"name"`
-	Slug        string    `json:"slug"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID               string    `json:"id"`
+	ProjectID        string    `json:"project_id"`
+	Name             string    `json:"name"`
+	Slug             string    `json:"slug"`
+	Description      string    `json:"description"`
+	EnvironmentCount int       `json:"environment_count"`
+	SecretCount      int       `json:"secret_count"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // Environment represents an environment
@@ -125,20 +127,25 @@ type Links struct {
 
 // Request types
 type CreateSecretRequest struct {
-	ProjectID     string  `json:"project_id"`
-	TargetID      *string `json:"target_id,omitempty"`
-	EnvironmentID *string `json:"environment_id,omitempty"`
-	Key           string  `json:"key"`
-	Value         string  `json:"value"`
-	IsEncrypted   bool    `json:"is_encrypted"`
+	ProjectSlug     string  `json:"project_slug"`
+	TargetSlug      *string `json:"target_slug,omitempty"`
+	EnvironmentSlug *string `json:"environment_slug,omitempty"`
+	Key             string  `json:"key"`
+	Value           string  `json:"value"`
+	IsEncrypted     bool    `json:"is_encrypted"`
 }
 
 type BulkSecretsRequest struct {
-	ProjectSlug     string            `json:"project_slug"`
-	TargetSlug      *string           `json:"target_slug,omitempty"`
-	EnvironmentSlug *string           `json:"environment_slug,omitempty"`
-	Format          string            `json:"format"` // env, json, yaml
-	Secrets         map[string]string `json:"secrets"`
+	ProjectSlug string              `json:"project_slug"`
+	Secrets     []BulkSecretItem   `json:"secrets"`
+}
+
+type BulkSecretItem struct {
+	Key             string  `json:"key"`
+	Value           string  `json:"value"`
+	TargetSlug      *string `json:"target_slug,omitempty"`
+	EnvironmentSlug *string `json:"environment_slug,omitempty"`
+	IsEncrypted     bool    `json:"is_encrypted"`
 }
 
 // RetrieveParams represents parameters for retrieving secrets
@@ -146,8 +153,14 @@ type RetrieveParams struct {
 	Project     string `json:"project"`
 	Target      string `json:"target,omitempty"`
 	Environment string `json:"environment,omitempty"`
-	Format      string `json:"format,omitempty"` // env, json, yaml
-	Decrypt     bool   `json:"decrypt,omitempty"`
+	Action      string `json:"action,omitempty"` // read, decrypt, key:retrieve (default: read)
+	Merge       string `json:"merge,omitempty"`  // 'true' or 'false' (default: 'false')
+	Raw         bool   `json:"raw,omitempty"`    // Simple key-value output
+	Filters     struct {
+		Names  []string `json:"names,omitempty"`
+		Tags   []string `json:"tags,omitempty"`
+		Search string   `json:"search,omitempty"`
+	} `json:"filters,omitempty"`
 }
 
 // PushSecretsRequest represents a request to push multiple secrets

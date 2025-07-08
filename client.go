@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -31,12 +32,13 @@ const (
 
 // Client manages communication with the DotEnv API
 type Client struct {
-	baseURL     *url.URL
-	apiKey      string      // Organization API key
-	bearerToken string      // OAuth2 access token
-	authType    AuthType    // Authentication method
-	httpClient  *http.Client
-	userAgent   string
+	baseURL      *url.URL
+	apiKey       string      // Organization API key
+	bearerToken  string      // OAuth2 access token
+	authType     AuthType    // Authentication method
+	organization string      // Organization context (ULID)
+	httpClient   *http.Client
+	userAgent    string
 
 	// Service endpoints
 	Organizations *OrganizationsService
@@ -45,6 +47,10 @@ type Client struct {
 	Environments  *EnvironmentsService
 	Secrets       *SecretsService
 	Encryption    *EncryptionService
+	OAuth         *OAuthService
+	User          *UserService
+	APIKeys       *APIKeysService
+	Telemetry     *TelemetryService
 }
 
 // ClientOption allows customization of the client
@@ -101,6 +107,13 @@ func WithBearerToken(token string) ClientOption {
 	}
 }
 
+// WithOrganization sets the organization context for API requests
+func WithOrganization(organization string) ClientOption {
+	return func(c *Client) {
+		c.organization = organization
+	}
+}
+
 // NewClient creates a new DotEnv API client with options
 func NewClient(opts ...ClientOption) *Client {
 	baseURL, _ := url.Parse(defaultBaseURL)
@@ -136,6 +149,10 @@ func NewClient(opts ...ClientOption) *Client {
 	c.Environments = &EnvironmentsService{client: c}
 	c.Secrets = &SecretsService{client: c}
 	c.Encryption = &EncryptionService{client: c}
+	c.OAuth = &OAuthService{client: c}
+	c.User = &UserService{client: c}
+	c.APIKeys = &APIKeysService{client: c}
+	c.Telemetry = &TelemetryService{client: c}
 
 	return c
 }
@@ -230,8 +247,18 @@ func checkResponse(r *http.Response) error {
 	switch r.StatusCode {
 	case http.StatusUnauthorized:
 		return &ErrUnauthorized{Message: errorResponse.Message}
+	case http.StatusForbidden:
+		// Extract resource info from URL
+		resource, id := extractResourceFromURL(r.Request.URL)
+		return &ErrForbidden{
+			Resource: resource,
+			ID:       id,
+			Action:   "access",
+		}
 	case http.StatusNotFound:
-		return &ErrNotFound{Resource: "resource", ID: ""}
+		// Extract resource info from URL
+		resource, id := extractResourceFromURL(r.Request.URL)
+		return &ErrNotFound{Resource: resource, ID: id}
 	case http.StatusTooManyRequests:
 		retryAfter := 60 // default to 60 seconds
 		if ra := r.Header.Get("Retry-After"); ra != "" {
@@ -281,4 +308,63 @@ func (c *Client) SetTLSSkipVerify(skip bool) {
 		Timeout:   defaultTimeout,
 		Transport: transport,
 	}
+}
+
+// Organization returns the client's organization context
+func (c *Client) Organization() string {
+	return c.organization
+}
+
+// SetOrganization updates the client's organization context
+func (c *Client) SetOrganization(organization string) {
+	c.organization = organization
+}
+
+// extractResourceFromURL attempts to extract resource type and ID from API URL
+func extractResourceFromURL(u *url.URL) (resource string, id string) {
+	path := u.Path
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	
+	// Common patterns:
+	// /api/v1/organizations/{org} -> organization, {org}
+	// /api/v1/organizations/{org}/projects/{project} -> project, {project}
+	// /api/v1/organizations/{org}/projects/{project}/secrets -> secrets, {project}
+	
+	for i := 0; i < len(parts)-1; i++ {
+		switch parts[i] {
+		case "organizations":
+			if i+1 < len(parts) {
+				return "organization", parts[i+1]
+			}
+		case "projects":
+			if i+1 < len(parts) {
+				return "project", parts[i+1]
+			}
+		case "targets":
+			if i+1 < len(parts) {
+				return "target", parts[i+1]
+			}
+		case "environments":
+			if i+1 < len(parts) {
+				return "environment", parts[i+1]
+			}
+		case "secrets":
+			if i+1 < len(parts) && parts[i+1] != "bulk" && parts[i+1] != "retrieve" {
+				return "secret", parts[i+1]
+			}
+		}
+	}
+	
+	// Check last part for resource type
+	lastPart := parts[len(parts)-1]
+	switch lastPart {
+	case "secrets":
+		return "secrets", ""
+	case "projects":
+		return "projects", ""
+	case "organizations":
+		return "organizations", ""
+	}
+	
+	return "resource", ""
 }
