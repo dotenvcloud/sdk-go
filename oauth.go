@@ -44,7 +44,7 @@ type OAuthErrorResponse struct {
 
 // ExchangeToken exchanges an authorization code for access token
 func (s *OAuthService) ExchangeToken(ctx context.Context, req OAuthTokenAuthCodeRequest) (*OAuthTokenResponse, *http.Response, error) {
-	u := "/api/v1/oauth/token"
+	u := "/api/oauth/token"
 
 	// Set grant type
 	req.GrantType = "authorization_code"
@@ -75,7 +75,7 @@ func (s *OAuthService) ExchangeToken(ctx context.Context, req OAuthTokenAuthCode
 
 // RefreshToken uses a refresh token to get a new access token
 func (s *OAuthService) RefreshToken(ctx context.Context, refreshToken string, clientID string) (*OAuthTokenResponse, *http.Response, error) {
-	u := "/api/v1/oauth/token"
+	u := "/api/oauth/token"
 
 	req := OAuthTokenRefreshRequest{
 		GrantType:    "refresh_token",

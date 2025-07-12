@@ -24,6 +24,8 @@ type Project struct {
 	Name             string    `json:"name"`
 	Slug             string    `json:"slug"`
 	Description      string    `json:"description"`
+	SecretFormat     string    `json:"secret_format"`
+	EncryptionType   string    `json:"encryption_type"` // "server" or "client"
 	HasSecrets       bool      `json:"has_secrets"`
 	SecretCount      int       `json:"secret_count"`
 	EnvironmentCount int       `json:"environment_count"`
