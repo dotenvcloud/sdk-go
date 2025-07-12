@@ -65,13 +65,14 @@ func main() {
 		// Example 3: Get secrets for a project
 		if len(projects) > 0 {
 			fmt.Println("\n=== Secrets ===")
-			secrets, _, err := client.Secrets.GetProjectSecrets(ctx, projects[0].Slug, "", "")
+			secretsResp, _, err := client.Secrets.GetProjectSecrets(ctx, projects[0].Slug, "", "")
 			if err != nil {
 				log.Printf("Error getting secrets: %v", err)
 			} else {
-				fmt.Printf("Found %d secrets\n", len(secrets))
-				for key := range secrets {
-					fmt.Printf("  - %s\n", key)
+				fmt.Printf("Found %d levels of secrets\n", len(secretsResp.Data.Attributes.Levels))
+				for level, data := range secretsResp.Data.Attributes.Levels {
+					fmt.Printf("  - Level: %s (encrypted: %v, source: %s)\n", 
+						level, data.Encrypted, data.Source)
 				}
 			}
 

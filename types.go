@@ -193,3 +193,34 @@ const (
 	EncryptionModeClientManaged EncryptionMode = "client_managed"
 	EncryptionModeHybrid        EncryptionMode = "hybrid"
 )
+
+// SecretsHierarchyResponse represents the hierarchical secrets response from the API
+type SecretsHierarchyResponse struct {
+	Data struct {
+		Type       string `json:"type"`
+		Attributes struct {
+			Encrypted bool                     `json:"encrypted"`
+			Format    string                   `json:"format"`
+			Levels    map[string]SecretLevel   `json:"levels"`
+		} `json:"attributes"`
+	} `json:"data"`
+	Meta struct {
+		APIPath   string `json:"api_path"`
+		Format    string `json:"format"`
+		Merged    string `json:"merged"`
+		Timestamp string `json:"timestamp"`
+		Hierarchy struct {
+			Project     string  `json:"project"`
+			Target      *string `json:"target"`
+			Environment *string `json:"environment"`
+		} `json:"hierarchy"`
+		Action string `json:"action"`
+	} `json:"meta"`
+}
+
+// SecretLevel represents a single level of secrets in the hierarchy
+type SecretLevel struct {
+	Encrypted bool   `json:"encrypted"`
+	Content   string `json:"content"`
+	Source    string `json:"source"`
+}

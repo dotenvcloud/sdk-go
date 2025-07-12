@@ -6,9 +6,11 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 // EncryptionService handles encryption key operations
@@ -37,11 +39,40 @@ func (s *EncryptionService) GetEncryptionKey(ctx context.Context, project string
 	key := new(EncryptionKey)
 	if data, ok := apiResp.Data.(map[string]interface{}); ok {
 		if attrs, ok := data["attributes"].(map[string]interface{}); ok {
-			mapToStruct(attrs, key)
-			// Set ID from data
-			if id, ok := data["id"].(string); ok {
-				key.ID = id
+			// The key is now in a JSON string inside the content field
+			if content, ok := attrs["content"].(string); ok {
+				// Parse the JSON content
+				var contentData map[string]interface{}
+				if err := json.Unmarshal([]byte(content), &contentData); err != nil {
+					return nil, resp, fmt.Errorf("failed to parse encryption key content: %w", err)
+				}
+				
+				// Extract the key information
+				if keyData, ok := contentData["key"].(map[string]interface{}); ok {
+					if keyStr, ok := keyData["key"].(string); ok {
+						key.Key = keyStr
+					}
+					if version, ok := keyData["version"].(float64); ok {
+						// Store version if needed
+						key.ID = fmt.Sprintf("v%d", int(version))
+					}
+					if createdAt, ok := keyData["created_at"].(string); ok {
+						// Parse created_at if needed
+						if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
+							key.CreatedAt = t
+						}
+					}
+				}
 			}
+			
+			// Other attributes are available in attrs if needed:
+			// - format: attrs["format"].(string)
+			// - encrypted: attrs["encrypted"].(bool)
+		}
+		
+		// Set ID from data if available
+		if id, ok := data["id"].(string); ok {
+			key.ID = id
 		}
 	}
 
@@ -82,12 +113,10 @@ func (s *EncryptionService) RotateClientKeys(ctx context.Context, project string
 
 // Encrypt encrypts data using AES-256-GCM
 func Encrypt(plaintext string, key []byte) (string, error) {
-	// Ensure key is 32 bytes for AES-256
-	if len(key) != 32 {
-		return "", fmt.Errorf("encryption key must be 32 bytes for AES-256")
-	}
+	// Apply key padding to ensure key is exactly 32 bytes
+	paddedKey := padKey(key)
 
-	block, err := aes.NewCipher(key)
+	block, err := aes.NewCipher(paddedKey)
 	if err != nil {
 		return "", err
 	}
@@ -116,10 +145,8 @@ func Encrypt(plaintext string, key []byte) (string, error) {
 
 // Decrypt decrypts data encrypted with AES-256-GCM
 func Decrypt(ciphertext string, key []byte) (string, error) {
-	// Ensure key is 32 bytes for AES-256
-	if len(key) != 32 {
-		return "", fmt.Errorf("decryption key must be 32 bytes for AES-256")
-	}
+	// Apply key padding to ensure key is exactly 32 bytes
+	paddedKey := padKey(key)
 
 	// Decode from base64
 	data, err := base64.StdEncoding.DecodeString(ciphertext)
@@ -136,7 +163,7 @@ func Decrypt(ciphertext string, key []byte) (string, error) {
 	nonce := data[:12]
 	ciphertextWithTag := data[12:]
 
-	block, err := aes.NewCipher(key)
+	block, err := aes.NewCipher(paddedKey)
 	if err != nil {
 		return "", err
 	}
@@ -172,4 +199,21 @@ func EncodeKey(key []byte) string {
 // DecodeKey decodes a base64 encoded key
 func DecodeKey(encoded string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(encoded)
+}
+
+// padKey pads or truncates a key to exactly 32 bytes for AES-256
+// This matches the web application's key padding behavior
+func padKey(key []byte) []byte {
+	if len(key) >= 32 {
+		// Key is 32 bytes or longer, truncate to 32 bytes
+		return key[:32]
+	}
+	
+	// Key is shorter than 32 bytes, pad with '0' bytes
+	padded := make([]byte, 32)
+	copy(padded, key)
+	for i := len(key); i < 32; i++ {
+		padded[i] = '0'
+	}
+	return padded
 }

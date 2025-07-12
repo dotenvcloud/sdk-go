@@ -12,23 +12,20 @@ type SecretsService struct {
 }
 
 // GetProjectSecrets retrieves secrets for a project with optional target and environment
-func (s *SecretsService) GetProjectSecrets(ctx context.Context, project, target, environment string) (map[string]string, *http.Response, error) {
+func (s *SecretsService) GetProjectSecrets(ctx context.Context, project, target, environment string) (*SecretsHierarchyResponse, *http.Response, error) {
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
-	u := fmt.Sprintf("/api/v1/%s/%s/secrets", s.client.organization, project)
-
-	// Add query parameters
-	if target != "" || environment != "" {
-		u = fmt.Sprintf("%s?", u)
-		if target != "" {
-			u = fmt.Sprintf("%starget=%s", u, target)
-			if environment != "" {
-				u = fmt.Sprintf("%s&environment=%s", u, environment)
-			}
-		} else if environment != "" {
-			u = fmt.Sprintf("%senvironment=%s", u, environment)
-		}
+	
+	// Build URL with path segments, NOT query parameters
+	// Using the SHORT format as confirmed by curl tests
+	var u string
+	if environment != "" && target != "" {
+		u = fmt.Sprintf("/api/v1/%s/%s/%s/%s/secrets", s.client.organization, project, target, environment)
+	} else if target != "" {
+		u = fmt.Sprintf("/api/v1/%s/%s/%s/secrets", s.client.organization, project, target)
+	} else {
+		u = fmt.Sprintf("/api/v1/%s/%s/secrets", s.client.organization, project)
 	}
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
@@ -36,29 +33,13 @@ func (s *SecretsService) GetProjectSecrets(ctx context.Context, project, target,
 		return nil, nil, err
 	}
 
-	var apiResp JSONAPIResponse
+	var apiResp SecretsHierarchyResponse
 	resp, err := s.client.Do(ctx, req, &apiResp)
 	if err != nil {
 		return nil, resp, err
 	}
 
-	// Parse secrets from response
-	secrets := make(map[string]string)
-	if data, ok := apiResp.Data.([]interface{}); ok {
-		for _, item := range data {
-			if secretData, ok := item.(map[string]interface{}); ok {
-				if attrs, ok := secretData["attributes"].(map[string]interface{}); ok {
-					if key, ok := attrs["key"].(string); ok {
-						if value, ok := attrs["value"].(string); ok {
-							secrets[key] = value
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return secrets, resp, nil
+	return &apiResp, resp, nil
 }
 
 // RetrieveSecrets fetches secrets with complex queries
