@@ -111,7 +111,7 @@ func parseJSONResponse(resp *http.Response, v interface{}) error {
 		return fmt.Errorf("nil response or body")
 	}
 	defer resp.Body.Close()
-	
+
 	decoder := json.NewDecoder(resp.Body)
 	return decoder.Decode(v)
 }

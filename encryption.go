@@ -46,7 +46,7 @@ func (s *EncryptionService) GetEncryptionKey(ctx context.Context, project string
 				if err := json.Unmarshal([]byte(content), &contentData); err != nil {
 					return nil, resp, fmt.Errorf("failed to parse encryption key content: %w", err)
 				}
-				
+
 				// Extract the key information
 				if keyData, ok := contentData["key"].(map[string]interface{}); ok {
 					if keyStr, ok := keyData["key"].(string); ok {
@@ -64,12 +64,12 @@ func (s *EncryptionService) GetEncryptionKey(ctx context.Context, project string
 					}
 				}
 			}
-			
+
 			// Other attributes are available in attrs if needed:
 			// - format: attrs["format"].(string)
 			// - encrypted: attrs["encrypted"].(bool)
 		}
-		
+
 		// Set ID from data if available
 		if id, ok := data["id"].(string); ok {
 			key.ID = id
@@ -208,7 +208,7 @@ func padKey(key []byte) []byte {
 		// Key is 32 bytes or longer, truncate to 32 bytes
 		return key[:32]
 	}
-	
+
 	// Key is shorter than 32 bytes, pad with '0' bytes
 	padded := make([]byte, 32)
 	copy(padded, key)

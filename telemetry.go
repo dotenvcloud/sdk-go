@@ -75,7 +75,7 @@ func (s *TelemetryService) TrackCommand(ctx context.Context, command string, dur
 	if properties == nil {
 		properties = make(map[string]interface{})
 	}
-	
+
 	properties["command"] = command
 	properties["duration"] = duration.Milliseconds()
 	properties["success"] = success
@@ -94,7 +94,7 @@ func (s *TelemetryService) TrackError(ctx context.Context, command string, error
 	if properties == nil {
 		properties = make(map[string]interface{})
 	}
-	
+
 	properties["command"] = command
 	properties["error_type"] = errorType
 
@@ -112,7 +112,7 @@ func (s *TelemetryService) TrackFeatureUsage(ctx context.Context, feature string
 	if properties == nil {
 		properties = make(map[string]interface{})
 	}
-	
+
 	properties["feature"] = feature
 
 	event := TelemetryEvent{

@@ -76,3 +76,71 @@ func (s *OrganizationsService) Get(ctx context.Context, slug string) (*Organizat
 
 	return org, resp, nil
 }
+
+// Create creates a new organization
+func (s *OrganizationsService) Create(ctx context.Context, org *OrganizationCreateRequest) (*Organization, *http.Response, error) {
+	u := "/api/v1/organizations"
+
+	req, err := s.client.NewRequest(ctx, "POST", u, org)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var apiResp JSONAPIResponse
+	resp, err := s.client.Do(ctx, req, &apiResp)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	organization := new(Organization)
+	if data, ok := apiResp.Data.(map[string]interface{}); ok {
+		if attrs, ok := data["attributes"].(map[string]interface{}); ok {
+			mapToStruct(attrs, organization)
+			if id, ok := data["id"].(string); ok {
+				organization.ID = id
+			}
+		}
+	}
+
+	return organization, resp, nil
+}
+
+// Update updates an organization
+func (s *OrganizationsService) Update(ctx context.Context, id string, org *OrganizationUpdateRequest) (*Organization, *http.Response, error) {
+	u := fmt.Sprintf("/api/v1/organizations/%s", id)
+
+	req, err := s.client.NewRequest(ctx, "PATCH", u, org)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var apiResp JSONAPIResponse
+	resp, err := s.client.Do(ctx, req, &apiResp)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	organization := new(Organization)
+	if data, ok := apiResp.Data.(map[string]interface{}); ok {
+		if attrs, ok := data["attributes"].(map[string]interface{}); ok {
+			mapToStruct(attrs, organization)
+			if id, ok := data["id"].(string); ok {
+				organization.ID = id
+			}
+		}
+	}
+
+	return organization, resp, nil
+}
+
+// Delete deletes an organization
+func (s *OrganizationsService) Delete(ctx context.Context, id string) (*http.Response, error) {
+	u := fmt.Sprintf("/api/v1/organizations/%s", id)
+
+	req, err := s.client.NewRequest(ctx, "DELETE", u, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.client.Do(ctx, req, nil)
+}

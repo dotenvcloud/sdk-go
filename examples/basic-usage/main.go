@@ -71,7 +71,7 @@ func main() {
 			} else {
 				fmt.Printf("Found %d levels of secrets\n", len(secretsResp.Data.Attributes.Levels))
 				for level, data := range secretsResp.Data.Attributes.Levels {
-					fmt.Printf("  - Level: %s (encrypted: %v, source: %s)\n", 
+					fmt.Printf("  - Level: %s (encrypted: %v, source: %s)\n",
 						level, data.Encrypted, data.Source)
 				}
 			}

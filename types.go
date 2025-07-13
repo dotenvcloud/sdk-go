@@ -138,8 +138,8 @@ type CreateSecretRequest struct {
 }
 
 type BulkSecretsRequest struct {
-	ProjectSlug string              `json:"project_slug"`
-	Secrets     []BulkSecretItem   `json:"secrets"`
+	ProjectSlug string           `json:"project_slug"`
+	Secrets     []BulkSecretItem `json:"secrets"`
 }
 
 type BulkSecretItem struct {
@@ -148,6 +148,18 @@ type BulkSecretItem struct {
 	TargetSlug      *string `json:"target_slug,omitempty"`
 	EnvironmentSlug *string `json:"environment_slug,omitempty"`
 	IsEncrypted     bool    `json:"is_encrypted"`
+}
+
+// OrganizationCreateRequest represents a request to create an organization
+type OrganizationCreateRequest struct {
+	Name string `json:"name"`
+	Slug string `json:"slug,omitempty"`
+}
+
+// OrganizationUpdateRequest represents a request to update an organization
+type OrganizationUpdateRequest struct {
+	Name *string `json:"name,omitempty"`
+	Slug *string `json:"slug,omitempty"`
 }
 
 // RetrieveParams represents parameters for retrieving secrets
@@ -201,9 +213,9 @@ type SecretsHierarchyResponse struct {
 	Data struct {
 		Type       string `json:"type"`
 		Attributes struct {
-			Encrypted bool                     `json:"encrypted"`
-			Format    string                   `json:"format"`
-			Levels    map[string]SecretLevel   `json:"levels"`
+			Encrypted bool                   `json:"encrypted"`
+			Format    string                 `json:"format"`
+			Levels    map[string]SecretLevel `json:"levels"`
 		} `json:"attributes"`
 	} `json:"data"`
 	Meta struct {

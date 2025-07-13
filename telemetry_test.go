@@ -40,14 +40,14 @@ func TestTelemetryService_SendEvent(t *testing.T) {
 				Name:      "cli.command",
 				Timestamp: time.Now().UTC().Round(time.Millisecond),
 				Properties: map[string]interface{}{
-					"command":       "pull",
-					"project":       "myproject",
-					"duration_ms":   1234,
-					"success":       true,
-					"version":       "1.0.0",
-					"os":            "darwin",
-					"architecture":  "arm64",
-					"error_code":    nil,
+					"command":      "pull",
+					"project":      "myproject",
+					"duration_ms":  1234,
+					"success":      true,
+					"version":      "1.0.0",
+					"os":           "darwin",
+					"architecture": "arm64",
+					"error_code":   nil,
 				},
 			},
 			mockStatusCode: http.StatusOK,
@@ -82,7 +82,7 @@ func TestTelemetryService_SendEvent(t *testing.T) {
 					},
 					"metrics": map[string]interface{}{
 						"secrets_encrypted": 10,
-						"time_ms":          250,
+						"time_ms":           250,
 					},
 				},
 			},
@@ -94,7 +94,7 @@ func TestTelemetryService_SendEvent(t *testing.T) {
 				details, ok := req.Events[0].Properties["details"].(map[string]interface{})
 				require.True(t, ok)
 				assert.Equal(t, "AES-256-GCM", details["algorithm"])
-				
+
 				metrics, ok := req.Events[0].Properties["metrics"].(map[string]interface{})
 				require.True(t, ok)
 				assert.Equal(t, float64(10), metrics["secrets_encrypted"])
@@ -152,11 +152,11 @@ func TestTelemetryService_SendEvent(t *testing.T) {
 				var reqBody dotenv.TelemetryBatchRequest
 				err := json.NewDecoder(r.Body).Decode(&reqBody)
 				require.NoError(t, err)
-				
+
 				require.Len(t, reqBody.Events, 1)
 				assert.Equal(t, tt.event.Name, reqBody.Events[0].Name)
 				assert.WithinDuration(t, tt.event.Timestamp, reqBody.Events[0].Timestamp, time.Second)
-				
+
 				// Validate custom request validation if provided
 				if tt.validateReq != nil {
 					tt.validateReq(t, reqBody)
@@ -209,11 +209,11 @@ func TestTelemetryService_SendEvent(t *testing.T) {
 func TestTelemetryService_SendBatch(t *testing.T) {
 	// Test sending multiple events in a batch
 	var capturedBatch dotenv.TelemetryBatchRequest
-	
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := json.NewDecoder(r.Body).Decode(&capturedBatch)
 		require.NoError(t, err)
-		
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(dotenv.TelemetryResponse{Success: true})
 	}))
@@ -262,9 +262,9 @@ func TestTelemetryService_TrackCommand(t *testing.T) {
 		err := json.NewDecoder(r.Body).Decode(&batch)
 		require.NoError(t, err)
 		require.Len(t, batch.Events, 1)
-		
+
 		capturedEvent = batch.Events[0]
-		
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(dotenv.TelemetryResponse{Success: true})
 	}))
@@ -280,7 +280,7 @@ func TestTelemetryService_TrackCommand(t *testing.T) {
 		"project": "test-project",
 		"target":  "production",
 	}
-	
+
 	resp, err := client.Telemetry.TrackCommand(
 		context.Background(),
 		"pull",
@@ -288,7 +288,7 @@ func TestTelemetryService_TrackCommand(t *testing.T) {
 		true,
 		props,
 	)
-	
+
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 
@@ -309,9 +309,9 @@ func TestTelemetryService_TrackError(t *testing.T) {
 		err := json.NewDecoder(r.Body).Decode(&batch)
 		require.NoError(t, err)
 		require.Len(t, batch.Events, 1)
-		
+
 		capturedEvent = batch.Events[0]
-		
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(dotenv.TelemetryResponse{Success: true})
 	}))
@@ -327,14 +327,14 @@ func TestTelemetryService_TrackError(t *testing.T) {
 		"project":    "test-project",
 		"error_code": "AUTH_001",
 	}
-	
+
 	resp, err := client.Telemetry.TrackError(
 		context.Background(),
 		"push",
 		"authentication_failed",
 		props,
 	)
-	
+
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 
@@ -354,9 +354,9 @@ func TestTelemetryService_TrackFeatureUsage(t *testing.T) {
 		err := json.NewDecoder(r.Body).Decode(&batch)
 		require.NoError(t, err)
 		require.Len(t, batch.Events, 1)
-		
+
 		capturedEvent = batch.Events[0]
-		
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(dotenv.TelemetryResponse{Success: true})
 	}))
@@ -372,13 +372,13 @@ func TestTelemetryService_TrackFeatureUsage(t *testing.T) {
 		"encryption_type": "client-side",
 		"key_source":      "user-provided",
 	}
-	
+
 	resp, err := client.Telemetry.TrackFeatureUsage(
 		context.Background(),
 		"encryption",
 		props,
 	)
-	
+
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 
@@ -423,20 +423,20 @@ func TestTelemetryService_SpecialCharactersInProperties(t *testing.T) {
 		err := json.NewDecoder(r.Body).Decode(&batch)
 		require.NoError(t, err)
 		require.Len(t, batch.Events, 1)
-		
+
 		event := batch.Events[0]
-		
+
 		// Verify special characters are preserved
 		assert.Equal(t, "value with \"quotes\" and 'apostrophes'", event.Properties["special_string"])
 		assert.Equal(t, "path/with/slashes\\and\\backslashes", event.Properties["path"])
 		assert.Equal(t, "unicode: 你好世界 🌍", event.Properties["unicode"])
-		
+
 		// Verify numeric types
 		assert.Equal(t, float64(42), event.Properties["integer"])
 		assert.Equal(t, 3.14159, event.Properties["float"])
 		assert.Equal(t, true, event.Properties["boolean"])
 		assert.Nil(t, event.Properties["null_value"])
-		
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(dotenv.TelemetryResponse{Success: true})
 	}))
@@ -452,13 +452,13 @@ func TestTelemetryService_SpecialCharactersInProperties(t *testing.T) {
 		Timestamp: time.Now().UTC(),
 		Properties: map[string]interface{}{
 			"special_string": "value with \"quotes\" and 'apostrophes'",
-			"path":          "path/with/slashes\\and\\backslashes",
-			"unicode":       "unicode: 你好世界 🌍",
-			"integer":       42,
-			"float":         3.14159,
-			"boolean":       true,
-			"null_value":    nil,
-			"array":         []string{"one", "two", "three"},
+			"path":           "path/with/slashes\\and\\backslashes",
+			"unicode":        "unicode: 你好世界 🌍",
+			"integer":        42,
+			"float":          3.14159,
+			"boolean":        true,
+			"null_value":     nil,
+			"array":          []string{"one", "two", "three"},
 		},
 	}
 
@@ -493,6 +493,6 @@ func TestTelemetryService_CLIVersionHeader(t *testing.T) {
 
 	_, err := client.Telemetry.SendEvent(ctx, event)
 	require.NoError(t, err)
-	
+
 	assert.Equal(t, "1.2.3", capturedVersion)
 }

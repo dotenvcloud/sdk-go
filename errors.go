@@ -48,6 +48,13 @@ type (
 	ErrValidation struct {
 		Errors map[string]string
 	}
+
+	// ErrConflict indicates a resource conflict (e.g., duplicate)
+	ErrConflict struct {
+		Resource string
+		Field    string
+		Value    string
+	}
 )
 
 func (e ErrNotFound) Error() string {
@@ -82,6 +89,13 @@ func (e ErrValidation) Error() string {
 	return fmt.Sprintf("validation failed: %v", e.Errors)
 }
 
+func (e ErrConflict) Error() string {
+	if e.Field != "" && e.Value != "" {
+		return fmt.Sprintf("%s already exists with %s '%s'", e.Resource, e.Field, e.Value)
+	}
+	return fmt.Sprintf("%s already exists", e.Resource)
+}
+
 // IsNotFound checks if error is a not found error
 func IsNotFound(err error) bool {
 	_, ok := err.(*ErrNotFound)
@@ -109,5 +123,11 @@ func IsRateLimited(err error) bool {
 // IsValidation checks if error is validation error
 func IsValidation(err error) bool {
 	_, ok := err.(*ErrValidation)
+	return ok
+}
+
+// IsConflict checks if error is conflict error
+func IsConflict(err error) bool {
+	_, ok := err.(*ErrConflict)
 	return ok
 }

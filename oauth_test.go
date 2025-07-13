@@ -71,7 +71,7 @@ func TestOAuthService_ExchangeToken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, "/api/v1/oauth/token", r.URL.Path)
+				assert.Equal(t, "/api/oauth/token", r.URL.Path)
 				assert.Equal(t, "POST", r.Method)
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -173,7 +173,7 @@ func TestOAuthService_RefreshToken(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				assert.Equal(t, "/api/v1/oauth/token", r.URL.Path)
+				assert.Equal(t, "/api/oauth/token", r.URL.Path)
 				assert.Equal(t, "POST", r.Method)
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -275,4 +275,3 @@ func TestOAuthService_ContextCancellation(t *testing.T) {
 		assert.Contains(t, err.Error(), "context canceled")
 	})
 }
-

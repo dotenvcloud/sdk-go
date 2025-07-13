@@ -16,7 +16,7 @@ func (s *ProjectsService) List(ctx context.Context, opts *ListOptions) ([]*Proje
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
-	
+
 	u := fmt.Sprintf("/api/v1/%s/projects", s.client.organization)
 	u = addOptions(u, opts)
 

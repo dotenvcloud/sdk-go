@@ -19,7 +19,7 @@ func (s *TargetsService) List(ctx context.Context, projectSlug string, opts *Lis
 	if projectSlug == "" {
 		return nil, nil, fmt.Errorf("project identifier cannot be empty")
 	}
-	
+
 	u := fmt.Sprintf("/api/v1/%s/%s/targets", s.client.organization, projectSlug)
 	u = addOptions(u, opts)
 

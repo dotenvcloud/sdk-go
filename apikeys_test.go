@@ -103,7 +103,7 @@ func TestAPIKeysService_List(t *testing.T) {
 						resource.Attributes.UpdatedAt = key.UpdatedAt
 						resources = append(resources, resource)
 					}
-					
+
 					response := map[string]interface{}{
 						"data": resources,
 					}
@@ -259,7 +259,7 @@ func TestAPIKeysService_Create(t *testing.T) {
 					resource.Attributes.ExpiresAt = tt.mockResponse.APIKey.ExpiresAt
 					resource.Attributes.CreatedAt = tt.mockResponse.APIKey.CreatedAt
 					resource.Attributes.UpdatedAt = tt.mockResponse.APIKey.UpdatedAt
-					
+
 					response := map[string]interface{}{
 						"data": resource,
 					}
@@ -370,7 +370,7 @@ func TestAPIKeysService_Update(t *testing.T) {
 					resource.Attributes.LastUsedAt = tt.mockResponse.LastUsedAt
 					resource.Attributes.CreatedAt = tt.mockResponse.CreatedAt
 					resource.Attributes.UpdatedAt = tt.mockResponse.UpdatedAt
-					
+
 					response := map[string]interface{}{
 						"data": resource,
 					}
@@ -546,7 +546,7 @@ func TestAPIKeysService_Rotate(t *testing.T) {
 					resource.Attributes.ExpiresAt = tt.mockResponse.APIKey.ExpiresAt
 					resource.Attributes.CreatedAt = tt.mockResponse.APIKey.CreatedAt
 					resource.Attributes.UpdatedAt = tt.mockResponse.APIKey.UpdatedAt
-					
+
 					response := map[string]interface{}{
 						"data": resource,
 					}

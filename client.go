@@ -33,10 +33,10 @@ const (
 // Client manages communication with the DotEnv API
 type Client struct {
 	baseURL      *url.URL
-	apiKey       string      // Organization API key
-	bearerToken  string      // OAuth2 access token
-	authType     AuthType    // Authentication method
-	organization string      // Organization context (ULID)
+	apiKey       string   // Organization API key
+	bearerToken  string   // OAuth2 access token
+	authType     AuthType // Authentication method
+	organization string   // Organization context (ULID)
 	httpClient   *http.Client
 	userAgent    string
 
@@ -190,7 +190,7 @@ func (c *Client) NewRequest(ctx context.Context, method, urlStr string, body int
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
-	
+
 	// Set authentication header based on auth type
 	switch c.authType {
 	case AuthTypeBearer:
@@ -269,6 +269,9 @@ func checkResponse(r *http.Response) error {
 		if errorResponse.Errors != nil {
 			return &ErrValidation{Errors: errorResponse.Errors}
 		}
+	case http.StatusConflict:
+		resource, _ := extractResourceFromURL(r.Request.URL)
+		return &ErrConflict{Resource: resource}
 	}
 
 	return errorResponse
@@ -324,12 +327,12 @@ func (c *Client) SetOrganization(organization string) {
 func extractResourceFromURL(u *url.URL) (resource string, id string) {
 	path := u.Path
 	parts := strings.Split(strings.Trim(path, "/"), "/")
-	
+
 	// Common patterns:
 	// /api/v1/organizations/{org} -> organization, {org}
 	// /api/v1/organizations/{org}/projects/{project} -> project, {project}
 	// /api/v1/organizations/{org}/projects/{project}/secrets -> secrets, {project}
-	
+
 	for i := 0; i < len(parts)-1; i++ {
 		switch parts[i] {
 		case "organizations":
@@ -354,7 +357,7 @@ func extractResourceFromURL(u *url.URL) (resource string, id string) {
 			}
 		}
 	}
-	
+
 	// Check last part for resource type
 	lastPart := parts[len(parts)-1]
 	switch lastPart {
@@ -365,6 +368,6 @@ func extractResourceFromURL(u *url.URL) (resource string, id string) {
 	case "organizations":
 		return "organizations", ""
 	}
-	
+
 	return "resource", ""
 }

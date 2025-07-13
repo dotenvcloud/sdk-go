@@ -22,7 +22,7 @@ func (s *EnvironmentsService) List(ctx context.Context, projectSlug, targetSlug 
 	if targetSlug == "" {
 		return nil, nil, fmt.Errorf("target identifier cannot be empty")
 	}
-	
+
 	u := fmt.Sprintf("/api/v1/%s/%s/%s/environments", s.client.organization, projectSlug, targetSlug)
 	u = addOptions(u, opts)
 

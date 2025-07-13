@@ -16,7 +16,7 @@ func (s *SecretsService) GetProjectSecrets(ctx context.Context, project, target,
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
-	
+
 	// Build URL with path segments, NOT query parameters
 	// Using the SHORT format as confirmed by curl tests
 	var u string
@@ -221,10 +221,10 @@ func (s *SecretsService) Create(ctx context.Context, req *CreateSecretRequest) (
 	if req.TargetSlug != nil || req.EnvironmentSlug != nil {
 		secrets = map[string]interface{}{
 			req.Key: map[string]interface{}{
-				"value":             req.Value,
-				"target_slug":       req.TargetSlug,
-				"environment_slug":  req.EnvironmentSlug,
-				"is_encrypted":      req.IsEncrypted,
+				"value":            req.Value,
+				"target_slug":      req.TargetSlug,
+				"environment_slug": req.EnvironmentSlug,
+				"is_encrypted":     req.IsEncrypted,
 			},
 		}
 	}
@@ -318,10 +318,10 @@ func (s *SecretsService) BulkCreate(ctx context.Context, req *BulkSecretsRequest
 	for _, secret := range req.Secrets {
 		if secret.TargetSlug != nil || secret.EnvironmentSlug != nil {
 			secretsMap[secret.Key] = map[string]interface{}{
-				"value":             secret.Value,
-				"target_slug":       secret.TargetSlug,
-				"environment_slug":  secret.EnvironmentSlug,
-				"is_encrypted":      secret.IsEncrypted,
+				"value":            secret.Value,
+				"target_slug":      secret.TargetSlug,
+				"environment_slug": secret.EnvironmentSlug,
+				"is_encrypted":     secret.IsEncrypted,
 			}
 		} else {
 			secretsMap[secret.Key] = secret.Value

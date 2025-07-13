@@ -17,14 +17,14 @@ import (
 
 func TestUserService_GetAuthenticatedUser(t *testing.T) {
 	tests := []struct {
-		name               string
-		organization       string
-		mockUser           *dotenv.User
-		mockOrganizations  []dotenv.UserOrganization
-		mockStatusCode     int
-		mockAuth           bool
-		wantErr            bool
-		checkError         func(t *testing.T, err error)
+		name              string
+		organization      string
+		mockUser          *dotenv.User
+		mockOrganizations []dotenv.UserOrganization
+		mockStatusCode    int
+		mockAuth          bool
+		wantErr           bool
+		checkError        func(t *testing.T, err error)
 	}{
 		{
 			name:         "successful user retrieval",
@@ -96,7 +96,7 @@ func TestUserService_GetAuthenticatedUser(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				assert.Equal(t, "/api/v1/user", r.URL.Path)
 				assert.Equal(t, "GET", r.Method)
-				
+
 				// Verify authentication header
 				authHeader := r.Header.Get("Authorization")
 				assert.NotEmpty(t, authHeader)
@@ -366,7 +366,7 @@ func TestUserService_WithMultipleOrganizationRoles(t *testing.T) {
 
 	// Verify we got all organizations with different roles
 	assert.Equal(t, 4, len(orgs))
-	
+
 	// Verify each organization and role
 	roles := make(map[string]string)
 	for _, org := range orgs {

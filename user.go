@@ -23,12 +23,12 @@ type User struct {
 
 // UserOrganization represents a user's organization membership
 type UserOrganization struct {
-	ID        string    `json:"id"`
-	ULID      string    `json:"ulid"`
-	Name      string    `json:"name"`
-	Slug      string    `json:"slug"`
-	Role      string    `json:"role"`
-	JoinedAt  time.Time `json:"joined_at"`
+	ID       string    `json:"id"`
+	ULID     string    `json:"ulid"`
+	Name     string    `json:"name"`
+	Slug     string    `json:"slug"`
+	Role     string    `json:"role"`
+	JoinedAt time.Time `json:"joined_at"`
 }
 
 // UserResponse represents the user info API response
