@@ -43,7 +43,7 @@ func main() {
 
 ```go
 client := dotenv.NewClient("your-api-key", 
-    dotenv.WithBaseURL("https://api.custom.dotenv.com"))
+    dotenv.WithBaseURL("https://api.custom.dotenv.cloud"))
 ```
 
 ### Custom HTTP Client

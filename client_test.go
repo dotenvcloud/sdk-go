@@ -28,7 +28,7 @@ func TestNewClient(t *testing.T) {
 			name:   "with custom base URL",
 			apiKey: "test-api-key",
 			opts: []dotenv.ClientOption{
-				dotenv.WithBaseURL("https://custom.dotenv.com"),
+				dotenv.WithBaseURL("https://custom.dotenv.cloud"),
 			},
 		},
 		{

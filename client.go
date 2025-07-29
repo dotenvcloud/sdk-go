@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defaultBaseURL = "https://api.dotenv.com"
+	defaultBaseURL = "https://api.dotenv.cloud"
 	defaultTimeout = 30 * time.Second
 	userAgent      = "dotenv-go-sdk/1.0.0"
 )

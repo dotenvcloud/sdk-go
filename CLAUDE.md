@@ -26,7 +26,7 @@ The Go SDK is designed to:
 client := dotenv.NewClient(
     dotenv.WithAPIKey("your-api-key"),
     dotenv.WithOrganization("org-id"),
-    dotenv.WithBaseURL("https://api.dotenv.com"),
+    dotenv.WithBaseURL("https://api.dotenv.cloud"),
 )
 ```
 
