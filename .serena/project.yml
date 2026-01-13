@@ -1,0 +1,38 @@
+# Serena MCP Configuration for DotEnv Go SDK
+# Language server: gopls
+
+language: go
+
+# Use gitignore for file filtering
+ignore_all_files_in_gitignore: true
+
+# Additional paths to ignore
+ignored_paths:
+  - "vendor/**"
+  - "**/*_test.go"  # Exclude test files from symbol analysis (optional)
+
+# Allow editing
+read_only: false
+
+# All tools available
+excluded_tools: []
+
+# Project identification
+project_name: "sdk-go"
+
+# Initial context when project is activated
+initial_prompt: |
+  This is the DotEnv Go SDK - a client library for the DotEnv API.
+
+  Key files:
+  - client.go: Main API client with configuration options
+  - secrets.go: Secret management operations
+  - encryption.go: AES-256-GCM encryption implementation
+  - errors.go: Error types matching API error responses
+
+  This SDK is used by:
+  - apps/cli: The DotEnv CLI tool imports this SDK
+  - External Go applications
+
+  API compatibility: Must match apps/web API endpoints
+  Encryption: Must be compatible with all other SDKs (PHP, JS)
