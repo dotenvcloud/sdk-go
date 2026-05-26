@@ -116,6 +116,7 @@ func (s *SecretsService) List(ctx context.Context, projectSlug string, opts *Sec
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
+	ctx = WithRequestResource(ctx, "secret", "")
 	u := fmt.Sprintf("/api/v1/%s/%s/secrets", s.client.organization, projectSlug)
 
 	// Add query parameters
@@ -174,6 +175,7 @@ func (s *SecretsService) Get(ctx context.Context, projectSlug, secretKey string)
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
+	ctx = WithRequestResource(ctx, "secret", secretKey)
 	u := fmt.Sprintf("/api/v1/%s/%s/secrets/%s", s.client.organization, projectSlug, secretKey)
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
@@ -250,6 +252,7 @@ func (s *SecretsService) Update(ctx context.Context, projectSlug, secretKey stri
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
+	ctx = WithRequestResource(ctx, "secret", secretKey)
 	u := fmt.Sprintf("/api/v1/%s/%s/secrets/%s", s.client.organization, projectSlug, secretKey)
 
 	// Wrap in JSON:API format
@@ -293,6 +296,7 @@ func (s *SecretsService) Delete(ctx context.Context, projectSlug, secretKey stri
 	if s.client.organization == "" {
 		return nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
+	ctx = WithRequestResource(ctx, "secret", secretKey)
 	u := fmt.Sprintf("/api/v1/%s/%s/secrets/%s", s.client.organization, projectSlug, secretKey)
 
 	req, err := s.client.NewRequest(ctx, "DELETE", u, nil)

@@ -13,6 +13,7 @@ type OrganizationsService struct {
 
 // List returns all organizations for the authenticated user
 func (s *OrganizationsService) List(ctx context.Context, opts *ListOptions) ([]*Organization, *http.Response, error) {
+	ctx = WithRequestResource(ctx, "organization", "")
 	u := "/api/v1/organizations"
 	u = addOptions(u, opts)
 
@@ -50,6 +51,7 @@ func (s *OrganizationsService) List(ctx context.Context, opts *ListOptions) ([]*
 
 // Get returns a single organization
 func (s *OrganizationsService) Get(ctx context.Context, slug string) (*Organization, *http.Response, error) {
+	ctx = WithRequestResource(ctx, "organization", slug)
 	u := fmt.Sprintf("/api/v1/organizations/%s", slug)
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
@@ -107,6 +109,7 @@ func (s *OrganizationsService) Create(ctx context.Context, org *OrganizationCrea
 
 // Update updates an organization
 func (s *OrganizationsService) Update(ctx context.Context, id string, org *OrganizationUpdateRequest) (*Organization, *http.Response, error) {
+	ctx = WithRequestResource(ctx, "organization", id)
 	u := fmt.Sprintf("/api/v1/organizations/%s", id)
 
 	req, err := s.client.NewRequest(ctx, "PATCH", u, org)
@@ -135,6 +138,7 @@ func (s *OrganizationsService) Update(ctx context.Context, id string, org *Organ
 
 // Delete deletes an organization
 func (s *OrganizationsService) Delete(ctx context.Context, id string) (*http.Response, error) {
+	ctx = WithRequestResource(ctx, "organization", id)
 	u := fmt.Sprintf("/api/v1/organizations/%s", id)
 
 	req, err := s.client.NewRequest(ctx, "DELETE", u, nil)

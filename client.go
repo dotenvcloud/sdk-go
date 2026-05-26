@@ -18,7 +18,35 @@ const (
 	defaultBaseURL = "https://api.dotenv.cloud"
 	defaultTimeout = 30 * time.Second
 	userAgent      = "dotenv-go-sdk/1.0.0"
+
+	// APIVersion is the contract version the SDK speaks. Sent on every
+	// outbound request as `X-API-Version` and echoed back by the server.
+	APIVersion = "1"
 )
+
+// resourceCtxKey is the unexported context key carrying the resource type +
+// ID a service is acting on. checkResponse reads it back from the request
+// context to populate ErrNotFound / ErrForbidden without parsing the URL.
+type resourceCtxKey struct{}
+
+type requestedResource struct {
+	Resource string
+	ID       string
+}
+
+// WithRequestResource attaches a resource type + ID to ctx so error mapping
+// in checkResponse can report the precise resource. Services call this before
+// NewRequest; callers normally don't need to.
+func WithRequestResource(ctx context.Context, resource, id string) context.Context {
+	return context.WithValue(ctx, resourceCtxKey{}, requestedResource{Resource: resource, ID: id})
+}
+
+func resourceFromContext(ctx context.Context) (string, string, bool) {
+	if r, ok := ctx.Value(resourceCtxKey{}).(requestedResource); ok {
+		return r.Resource, r.ID, true
+	}
+	return "", "", false
+}
 
 // AuthType represents the authentication method
 type AuthType int
@@ -78,16 +106,12 @@ func WithUserAgent(userAgent string) ClientOption {
 	}
 }
 
-// WithInsecureSkipVerify disables TLS certificate verification (for development only)
+// WithInsecureSkipVerify disables TLS certificate verification (for development
+// only). Mutates the existing httpClient.Transport so user-set timeouts and
+// wrapping round-trippers are preserved.
 func WithInsecureSkipVerify() ClientOption {
 	return func(c *Client) {
-		transport := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
-		c.httpClient = &http.Client{
-			Timeout:   defaultTimeout,
-			Transport: transport,
-		}
+		applyTLSSkipVerify(c.httpClient, true)
 	}
 }
 
@@ -190,6 +214,7 @@ func (c *Client) NewRequest(ctx context.Context, method, urlStr string, body int
 
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("X-API-Version", APIVersion)
 
 	// Set authentication header based on auth type
 	switch c.authType {
@@ -243,21 +268,27 @@ func checkResponse(r *http.Response) error {
 		json.Unmarshal(data, errorResponse)
 	}
 
+	// F-19: if server returned a machine code in the envelope and we know it,
+	// wrap with the matching sentinel so callers can use errors.Is.
+	if errorResponse.ErrorCode != "" {
+		if sentinel, ok := errCodeMap[errorResponse.ErrorCode]; ok {
+			return &ErrAPI{Sentinel: sentinel, ErrorResponse: errorResponse}
+		}
+	}
+
 	// Handle specific error types
 	switch r.StatusCode {
 	case http.StatusUnauthorized:
 		return &ErrUnauthorized{Message: errorResponse.Message}
 	case http.StatusForbidden:
-		// Extract resource info from URL
-		resource, id := extractResourceFromURL(r.Request.URL)
+		resource, id := resolveResource(r)
 		return &ErrForbidden{
 			Resource: resource,
 			ID:       id,
 			Action:   "access",
 		}
 	case http.StatusNotFound:
-		// Extract resource info from URL
-		resource, id := extractResourceFromURL(r.Request.URL)
+		resource, id := resolveResource(r)
 		return &ErrNotFound{Resource: resource, ID: id}
 	case http.StatusTooManyRequests:
 		retryAfter := 60 // default to 60 seconds
@@ -270,11 +301,26 @@ func checkResponse(r *http.Response) error {
 			return &ErrValidation{Errors: errorResponse.Errors}
 		}
 	case http.StatusConflict:
-		resource, _ := extractResourceFromURL(r.Request.URL)
+		resource, _ := resolveResource(r)
 		return &ErrConflict{Resource: resource}
 	}
 
 	return errorResponse
+}
+
+// resolveResource pulls the resource type/ID first from the request context
+// (set explicitly by services — F-18) and falls back to URL parsing for
+// callers that haven't migrated yet.
+func resolveResource(r *http.Response) (string, string) {
+	if r != nil && r.Request != nil {
+		if resource, id, ok := resourceFromContext(r.Request.Context()); ok {
+			return resource, id
+		}
+		if r.Request.URL != nil {
+			return extractResourceFromURL(r.Request.URL)
+		}
+	}
+	return "resource", ""
 }
 
 // APIKey returns the client's API key
@@ -302,15 +348,65 @@ func (c *Client) IsUsingBearer() bool {
 	return c.authType == AuthTypeBearer
 }
 
-// SetTLSSkipVerify enables or disables TLS certificate verification
+// SetTLSSkipVerify enables or disables TLS certificate verification. Mutates
+// the existing transport so user-set timeouts and wrapping round-trippers
+// (e.g. retry decorators) are preserved.
 func (c *Client) SetTLSSkipVerify(skip bool) {
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: skip},
+	applyTLSSkipVerify(c.httpClient, skip)
+}
+
+// applyTLSSkipVerify drills into hc.Transport, walks any wrapping
+// http.RoundTripper that exposes `Unwrap() http.RoundTripper` (Go 1.20+
+// convention), and toggles InsecureSkipVerify without replacing the client.
+//
+// Wrappers that do NOT implement Unwrap cannot be drilled into: in that
+// case the entire wrapper chain is replaced with a fresh *http.Transport.
+// Callers who install custom round-trippers should implement Unwrap to
+// preserve their chain.
+//
+// The leaf transport's TLSClientConfig is cloned before mutation so a
+// caller-owned tls.Config shared across other clients is never modified.
+func applyTLSSkipVerify(hc *http.Client, skip bool) {
+	if hc == nil {
+		return
 	}
-	c.httpClient = &http.Client{
-		Timeout:   defaultTimeout,
-		Transport: transport,
+	if hc.Transport == nil {
+		hc.Transport = http.DefaultTransport.(*http.Transport).Clone()
 	}
+	rt := unwrapTransport(hc.Transport)
+	if rt == nil {
+		// Wrapper doesn't implement Unwrap — chain can't be preserved.
+		hc.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: skip},
+		}
+		return
+	}
+	if rt.TLSClientConfig == nil {
+		rt.TLSClientConfig = &tls.Config{InsecureSkipVerify: skip}
+		return
+	}
+	// Clone before mutating so we don't silently flip InsecureSkipVerify on
+	// a tls.Config the caller shares with other clients.
+	cloned := rt.TLSClientConfig.Clone()
+	cloned.InsecureSkipVerify = skip
+	rt.TLSClientConfig = cloned
+}
+
+// unwrapTransport returns the underlying *http.Transport if rt is one, or if
+// rt implements `Unwrap() http.RoundTripper` walks down to find one.
+func unwrapTransport(rt http.RoundTripper) *http.Transport {
+	for rt != nil {
+		if t, ok := rt.(*http.Transport); ok {
+			return t
+		}
+		type unwrapper interface{ Unwrap() http.RoundTripper }
+		if u, ok := rt.(unwrapper); ok {
+			rt = u.Unwrap()
+			continue
+		}
+		return nil
+	}
+	return nil
 }
 
 // Organization returns the client's organization context
