@@ -5,7 +5,7 @@ Official Go SDK for the DotEnv API - secure environment variable management for 
 ## Installation
 
 ```bash
-go get github.com/dotenv/sdk-go
+go get github.com/lostlink/dotenv-sdk-go
 ```
 
 ## Quick Start
@@ -18,7 +18,7 @@ import (
     "fmt"
     "log"
     
-    dotenv "github.com/dotenv/sdk-go"
+    dotenv "github.com/lostlink/dotenv-sdk-go"
 )
 
 func main() {

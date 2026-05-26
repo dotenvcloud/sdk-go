@@ -1,4 +1,4 @@
-module github.com/dotenv/sdk-go
+module github.com/lostlink/dotenv-sdk-go
 
 go 1.21
 

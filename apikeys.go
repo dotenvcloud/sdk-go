@@ -75,6 +75,7 @@ type APITokenCreationResource struct {
 
 // List returns all API keys for an organization
 func (s *APIKeysService) List(ctx context.Context, organization string) ([]*APIKey, *http.Response, error) {
+	ctx = WithRequestResource(ctx, "api_key", "")
 	u := fmt.Sprintf("/api/v1/%s/api-keys", organization)
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
@@ -146,6 +147,7 @@ func (s *APIKeysService) Create(ctx context.Context, organization string, create
 
 // Update updates an existing API key
 func (s *APIKeysService) Update(ctx context.Context, organization, keyID string, updateReq APIKeyUpdateRequest) (*APIKey, *http.Response, error) {
+	ctx = WithRequestResource(ctx, "api_key", keyID)
 	u := fmt.Sprintf("/api/v1/%s/api-keys/%s", organization, keyID)
 
 	req, err := s.client.NewRequest(ctx, "PATCH", u, updateReq)
@@ -178,6 +180,7 @@ func (s *APIKeysService) Update(ctx context.Context, organization, keyID string,
 
 // Delete deletes an API key
 func (s *APIKeysService) Delete(ctx context.Context, organization, keyID string) (*http.Response, error) {
+	ctx = WithRequestResource(ctx, "api_key", keyID)
 	u := fmt.Sprintf("/api/v1/%s/api-keys/%s", organization, keyID)
 
 	req, err := s.client.NewRequest(ctx, "DELETE", u, nil)

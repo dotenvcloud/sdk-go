@@ -20,6 +20,7 @@ func (s *TargetsService) List(ctx context.Context, projectSlug string, opts *Lis
 		return nil, nil, fmt.Errorf("project identifier cannot be empty")
 	}
 
+	ctx = WithRequestResource(ctx, "target", "")
 	u := fmt.Sprintf("/api/v1/%s/%s/targets", s.client.organization, projectSlug)
 	u = addOptions(u, opts)
 
@@ -59,6 +60,7 @@ func (s *TargetsService) Get(ctx context.Context, projectSlug, targetSlug string
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
+	ctx = WithRequestResource(ctx, "target", targetSlug)
 	u := fmt.Sprintf("/api/v1/%s/%s/%s", s.client.organization, projectSlug, targetSlug)
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
@@ -135,6 +137,7 @@ func (s *TargetsService) Update(ctx context.Context, projectSlug, targetSlug str
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
+	ctx = WithRequestResource(ctx, "target", targetSlug)
 	u := fmt.Sprintf("/api/v1/%s/%s/%s", s.client.organization, projectSlug, targetSlug)
 
 	// Wrap in JSON:API format
@@ -179,6 +182,7 @@ func (s *TargetsService) Delete(ctx context.Context, projectSlug, targetSlug str
 	if s.client.organization == "" {
 		return nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
+	ctx = WithRequestResource(ctx, "target", targetSlug)
 	u := fmt.Sprintf("/api/v1/%s/%s/%s", s.client.organization, projectSlug, targetSlug)
 
 	req, err := s.client.NewRequest(ctx, "DELETE", u, nil)

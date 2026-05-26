@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	dotenv "github.com/dotenv/sdk-go"
+	dotenv "github.com/lostlink/dotenv-sdk-go"
 )
 
 func main() {

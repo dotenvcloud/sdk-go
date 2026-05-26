@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,6 +24,7 @@ func (s *EncryptionService) GetEncryptionKey(ctx context.Context, project string
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
+	ctx = WithRequestResource(ctx, "encryption_key", project)
 	u := fmt.Sprintf("/api/v1/%s/%s/encryption-key", s.client.organization, project)
 
 	req, err := s.client.NewRequest(ctx, "GET", u, nil)
@@ -84,6 +86,7 @@ func (s *EncryptionService) RotateClientKeys(ctx context.Context, project string
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
+	ctx = WithRequestResource(ctx, "encryption_key", project)
 	u := fmt.Sprintf("/api/v1/%s/%s/secrets/rotate-client-keys", s.client.organization, project)
 
 	req, err := s.client.NewRequest(ctx, "POST", u, nil)
@@ -111,7 +114,11 @@ func (s *EncryptionService) RotateClientKeys(ctx context.Context, project string
 	return key, resp, nil
 }
 
-// Encrypt encrypts data using AES-256-GCM
+// Encrypt encrypts data using AES-256-GCM.
+//
+// Keys shorter than 32 bytes are silently padded with '0' bytes — this
+// preserves parity with the web application but halves the effective
+// entropy. Prefer EncryptWithStrictKey for new integrations.
 func Encrypt(plaintext string, key []byte) (string, error) {
 	// Apply key padding to ensure key is exactly 32 bytes
 	paddedKey := padKey(key)
@@ -138,6 +145,39 @@ func Encrypt(plaintext string, key []byte) (string, error) {
 	// Combine nonce + ciphertext for storage
 	// Format: base64(nonce + ciphertext + tag)
 	// Note: GCM's Seal already appends the tag to ciphertext
+	combined := append(nonce, ciphertext...)
+
+	return base64.StdEncoding.EncodeToString(combined), nil
+}
+
+// ErrKeyTooShort is returned by EncryptWithStrictKey when the supplied key is
+// shorter than the 32 bytes required for AES-256.
+var ErrKeyTooShort = errors.New("dotenv: encryption key must be at least 32 bytes")
+
+// EncryptWithStrictKey encrypts data using AES-256-GCM and rejects keys
+// shorter than 32 bytes. Unlike Encrypt this does not silently pad — short
+// keys are a programmer error worth surfacing.
+func EncryptWithStrictKey(plaintext string, key []byte) (string, error) {
+	if len(key) < 32 {
+		return "", ErrKeyTooShort
+	}
+
+	block, err := aes.NewCipher(key[:32])
+	if err != nil {
+		return "", err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	nonce := make([]byte, 12)
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", err
+	}
+
+	ciphertext := gcm.Seal(nil, nonce, []byte(plaintext), nil)
 	combined := append(nonce, ciphertext...)
 
 	return base64.StdEncoding.EncodeToString(combined), nil
