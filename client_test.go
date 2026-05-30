@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	dotenv "github.com/lostlink/dotenv-sdk-go"
+	dotenv "github.com/dotenvcloud/sdk-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	dotenv "github.com/lostlink/dotenv-sdk-go"
+	dotenv "github.com/dotenvcloud/sdk-go"
 )
 
 func BenchmarkClient_Organizations_List(b *testing.B) {
