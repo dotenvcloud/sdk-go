@@ -222,6 +222,34 @@ func Decrypt(ciphertext string, key []byte) (string, error) {
 	return string(plaintext), nil
 }
 
+// --- Canonical project-key crypto (mirrors the web app's EncryptionService) ---
+//
+// The web app (apps/web, App\Services\EncryptionService) is the platform's
+// source of truth for the crypto contract; this SDK mirrors it. A project key
+// is a RAW STRING — it is NEVER hex/base64-decoded. It is used as ASCII bytes,
+// padded with '0' (0x30) or truncated to 32 bytes for AES-256-GCM; wire format
+// is base64(IV[12] + ciphertext + tag[16]). Decoding the key (e.g. hex) would
+// yield different key bytes and fail GCM authentication against data written by
+// the web or JS, so all consumers (the CLI included) must derive keys this way.
+
+// DeriveProjectKey converts a project key string into the 32-byte AES-256 key,
+// mirroring EncryptionService::padKey (str_pad($k, 32, '0') then substr(0, 32)).
+func DeriveProjectKey(key string) []byte {
+	return padKey([]byte(key))
+}
+
+// EncryptWithProjectKey encrypts plaintext with a project key string using
+// AES-256-GCM. Mirror of EncryptionService::encryptWithProjectKey.
+func EncryptWithProjectKey(plaintext, key string) (string, error) {
+	return Encrypt(plaintext, []byte(key))
+}
+
+// DecryptWithProjectKey decrypts ciphertext produced with a project key string.
+// Mirror of EncryptionService::decryptWithProjectKey.
+func DecryptWithProjectKey(ciphertext, key string) (string, error) {
+	return Decrypt(ciphertext, []byte(key))
+}
+
 // GenerateKey generates a new 32-byte encryption key
 func GenerateKey() ([]byte, error) {
 	key := make([]byte, 32)
