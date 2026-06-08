@@ -96,11 +96,13 @@ func (s *SecretsService) RetrieveSecrets(ctx context.Context, params RetrievePar
 	return secrets, resp, nil
 }
 
-// StoreSecrets upserts the encrypted .env blob for a level. The level is the
-// deepest of project/target/environment provided (target/environment may be
-// empty). content must already be encrypted — it is the inverse of the
-// per-level content returned by GetProjectSecrets.
-func (s *SecretsService) StoreSecrets(ctx context.Context, project, target, environment, content string) (*http.Response, error) {
+// StoreSecrets upserts the encrypted .env blob for a level (the deepest of
+// project/target/environment provided; target/environment may be empty).
+// content must already be encrypted — it is the inverse of the per-level
+// content returned by GetProjectSecrets. keyProof is the base64 PBKDF2 proof
+// for client-managed projects (empty for server-managed); the server rejects a
+// mismatch so a wrong key cannot silently corrupt secrets.
+func (s *SecretsService) StoreSecrets(ctx context.Context, project, target, environment, content, keyProof string) (*http.Response, error) {
 	if s.client.organization == "" {
 		return nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
@@ -112,6 +114,7 @@ func (s *SecretsService) StoreSecrets(ctx context.Context, project, target, envi
 		Target:      target,
 		Environment: environment,
 		Content:     content,
+		KeyProof:    keyProof,
 	}
 
 	req, err := s.client.NewRequest(ctx, "POST", u, body)

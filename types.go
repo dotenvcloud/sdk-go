@@ -74,14 +74,25 @@ type Secret struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-// EncryptionKey represents an encryption key
+// EncryptionKey represents an encryption key descriptor returned by the
+// encryption-key endpoint.
+//
+//   - Managed == "server": Key holds the raw key.
+//   - Managed == "client": Key is empty (the server never holds it). KeyCheckSalt
+//     and KeyCheckIterations are the PBKDF2 parameters the client uses to compute
+//     the proof it must send on every write (see DeriveKeyProof).
 type EncryptionKey struct {
 	ID              string    `json:"id"`
 	ProjectID       string    `json:"project_id"`
-	Key             string    `json:"key"` // Base64 encoded
+	Key             string    `json:"key"` // server-managed only
 	IsActive        bool      `json:"is_active"`
 	IsClientManaged bool      `json:"is_client_managed"`
 	CreatedAt       time.Time `json:"created_at"`
+
+	Managed            string `json:"managed,omitempty"` // "server" | "client"
+	Version            int    `json:"version,omitempty"`
+	KeyCheckSalt       string `json:"key_check_salt,omitempty"`
+	KeyCheckIterations int    `json:"key_check_iterations,omitempty"`
 }
 
 // API Response Types for JSON:API format
@@ -136,6 +147,21 @@ type StoreSecretsRequest struct {
 	Target      string `json:"target,omitempty"`
 	Environment string `json:"environment,omitempty"`
 	Content     string `json:"content"`
+	// KeyProof proves the client holds the project's key (client-managed only);
+	// the server rejects a mismatch so a wrong key cannot corrupt secrets.
+	KeyProof string `json:"key_proof,omitempty"`
+}
+
+// ProjectCreateOptions carries encryption setup for project creation. For
+// client-managed projects the client computes the key proof (KeyCheck/Salt/
+// Iterations via DeriveKeyProof) and registers it here so future pushes verify.
+type ProjectCreateOptions struct {
+	StorageMode        string // "server" | "client" (empty defers to the server default)
+	EncryptionKey      string // server-managed: explicit key (else the server generates one)
+	KeyHint            string
+	KeyCheck           string // client-managed: base64 PBKDF2 proof
+	KeyCheckSalt       string // client-managed: base64 salt
+	KeyCheckIterations int    // client-managed: PBKDF2 iteration count
 }
 
 // DeleteSecretsRequest clears the secrets blob for a level.

@@ -35,7 +35,7 @@ func TestStoreSecrets_RequestShape(t *testing.T) {
 	})
 	defer server.Close()
 
-	resp, err := client.Secrets.StoreSecrets(context.Background(), "myproj", "prod", "web", "CIPHERTEXT")
+	resp, err := client.Secrets.StoreSecrets(context.Background(), "myproj", "prod", "web", "CIPHERTEXT", "PROOF123")
 	if err != nil {
 		t.Fatalf("StoreSecrets returned error: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestStoreSecrets_RequestShape(t *testing.T) {
 	if gotPath != "/api/v1/test-org/secrets/store" {
 		t.Errorf("path = %q, want /api/v1/test-org/secrets/store", gotPath)
 	}
-	for k, want := range map[string]string{"project": "myproj", "target": "prod", "environment": "web", "content": "CIPHERTEXT"} {
+	for k, want := range map[string]string{"project": "myproj", "target": "prod", "environment": "web", "content": "CIPHERTEXT", "key_proof": "PROOF123"} {
 		if got, _ := gotBody[k].(string); got != want {
 			t.Errorf("body[%q] = %q, want %q", k, got, want)
 		}
@@ -65,7 +65,7 @@ func TestStoreSecrets_ProjectLevelOmitsEmpty(t *testing.T) {
 	})
 	defer server.Close()
 
-	resp, err := client.Secrets.StoreSecrets(context.Background(), "myproj", "", "", "BLOB")
+	resp, err := client.Secrets.StoreSecrets(context.Background(), "myproj", "", "", "BLOB", "")
 	if err != nil {
 		t.Fatalf("StoreSecrets returned error: %v", err)
 	}

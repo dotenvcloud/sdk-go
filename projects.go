@@ -85,8 +85,10 @@ func (s *ProjectsService) Get(ctx context.Context, projectSlug string) (*Project
 	return project, resp, nil
 }
 
-// Create creates a new project
-func (s *ProjectsService) Create(ctx context.Context, project *Project) (*Project, *http.Response, error) {
+// Create creates a new project. opts carries the encryption setup (storage mode
+// and, for client-managed projects, the key proof established at creation); pass
+// nil to use the server default (server-managed with a server-generated key).
+func (s *ProjectsService) Create(ctx context.Context, project *Project, opts *ProjectCreateOptions) (*Project, *http.Response, error) {
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
@@ -101,6 +103,26 @@ func (s *ProjectsService) Create(ctx context.Context, project *Project) (*Projec
 	}
 	if project.SecretFormat != "" {
 		reqData["secret_format"] = project.SecretFormat
+	}
+	if opts != nil {
+		if opts.StorageMode != "" {
+			reqData["storage_mode"] = opts.StorageMode
+		}
+		if opts.EncryptionKey != "" {
+			reqData["encryption_key"] = opts.EncryptionKey
+		}
+		if opts.KeyHint != "" {
+			reqData["key_hint"] = opts.KeyHint
+		}
+		if opts.KeyCheck != "" {
+			reqData["key_check"] = opts.KeyCheck
+		}
+		if opts.KeyCheckSalt != "" {
+			reqData["key_check_salt"] = opts.KeyCheckSalt
+		}
+		if opts.KeyCheckIterations != 0 {
+			reqData["key_check_iterations"] = opts.KeyCheckIterations
+		}
 	}
 
 	req, err := s.client.NewRequest(ctx, "POST", u, reqData)

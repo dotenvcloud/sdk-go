@@ -44,14 +44,24 @@ var (
 
 	// ErrNoActiveEncryptionKey — server returned `no_active_encryption_key`.
 	ErrNoActiveEncryptionKey = errors.New("no active encryption key for project")
+
+	// ErrKeyProofMismatch — server returned `key_proof_mismatch`: the key used to
+	// encrypt does not match the project's established key. The write was refused.
+	ErrKeyProofMismatch = errors.New("encryption key does not match the project's key")
+
+	// ErrKeyProofRequired — server returned `key_proof_required`: a client-managed
+	// project has no key verification configured yet (re-establish its key).
+	ErrKeyProofRequired = errors.New("project has no key verification configured")
 )
 
 // errCodeMap maps server-side machine codes to SDK sentinel errors. Codes
 // added here surface to callers via `errors.Is`.
 var errCodeMap = map[string]error{
-	"client_managed_encryption":      ErrClientManagedEncryption,
-	"invalid_parameter_combination":  ErrInvalidParameterCombination,
-	"no_active_encryption_key":       ErrNoActiveEncryptionKey,
+	"client_managed_encryption":     ErrClientManagedEncryption,
+	"invalid_parameter_combination": ErrInvalidParameterCombination,
+	"no_active_encryption_key":      ErrNoActiveEncryptionKey,
+	"key_proof_mismatch":            ErrKeyProofMismatch,
+	"key_proof_required":            ErrKeyProofRequired,
 }
 
 // ErrAPI wraps an ErrorResponse with a sentinel for `errors.Is` while keeping
