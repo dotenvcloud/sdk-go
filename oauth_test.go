@@ -26,6 +26,7 @@ func TestOAuthService_ExchangeToken(t *testing.T) {
 			name: "successful code exchange",
 			request: dotenv.OAuthTokenAuthCodeRequest{
 				Code:         "test-code",
+				RedirectURI:  "http://localhost:43893/callback",
 				CodeVerifier: "test-verifier",
 				ClientID:     "test-client",
 			},
@@ -85,6 +86,9 @@ func TestOAuthService_ExchangeToken(t *testing.T) {
 				assert.Equal(t, tt.request.Code, reqBody.Code)
 				assert.Equal(t, tt.request.ClientID, reqBody.ClientID)
 				assert.Equal(t, tt.request.CodeVerifier, reqBody.CodeVerifier)
+				// redirect_uri must be forwarded (required by the token endpoint
+				// and must match the value used at /oauth/authorize).
+				assert.Equal(t, tt.request.RedirectURI, reqBody.RedirectURI)
 
 				// Send response
 				w.Header().Set("Content-Type", "application/json")

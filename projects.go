@@ -92,16 +92,15 @@ func (s *ProjectsService) Create(ctx context.Context, project *Project) (*Projec
 	}
 	u := fmt.Sprintf("/api/v1/%s/projects", s.client.organization)
 
-	// Wrap in JSON:API format
+	// Flat body, matching the API's StoreProjectApiRequest.
 	reqData := map[string]interface{}{
-		"data": map[string]interface{}{
-			"type": "projects",
-			"attributes": map[string]interface{}{
-				"name":        project.Name,
-				"slug":        project.Slug,
-				"description": project.Description,
-			},
-		},
+		"name": project.Name,
+	}
+	if project.Description != "" {
+		reqData["description"] = project.Description
+	}
+	if project.SecretFormat != "" {
+		reqData["secret_format"] = project.SecretFormat
 	}
 
 	req, err := s.client.NewRequest(ctx, "POST", u, reqData)
@@ -137,16 +136,17 @@ func (s *ProjectsService) Update(ctx context.Context, projectSlug string, projec
 	ctx = WithRequestResource(ctx, "project", projectSlug)
 	u := fmt.Sprintf("/api/v1/%s/%s", s.client.organization, projectSlug)
 
-	// Wrap in JSON:API format
-	reqData := map[string]interface{}{
-		"data": map[string]interface{}{
-			"type": "projects",
-			"id":   project.ID,
-			"attributes": map[string]interface{}{
-				"name":        project.Name,
-				"description": project.Description,
-			},
-		},
+	// Flat body, matching the API's UpdateProjectApiRequest. Only populated
+	// fields are sent so partial (PATCH) updates work.
+	reqData := map[string]interface{}{}
+	if project.Name != "" {
+		reqData["name"] = project.Name
+	}
+	if project.Description != "" {
+		reqData["description"] = project.Description
+	}
+	if project.Slug != "" {
+		reqData["slug"] = project.Slug
 	}
 
 	req, err := s.client.NewRequest(ctx, "PATCH", u, reqData)

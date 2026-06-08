@@ -15,6 +15,7 @@ type OAuthService struct {
 type OAuthTokenAuthCodeRequest struct {
 	GrantType    string `json:"grant_type"`    // "authorization_code"
 	Code         string `json:"code"`          // Authorization code
+	RedirectURI  string `json:"redirect_uri"`  // Must match the redirect_uri used at /oauth/authorize
 	CodeVerifier string `json:"code_verifier"` // PKCE code verifier
 	ClientID     string `json:"client_id"`     // OAuth client ID
 }

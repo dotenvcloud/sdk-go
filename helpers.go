@@ -90,21 +90,6 @@ func mapToStruct(m map[string]interface{}, v interface{}) error {
 	return json.Unmarshal(data, v)
 }
 
-// stringPtr returns a pointer to a string
-func stringPtr(s string) *string {
-	return &s
-}
-
-// boolPtr returns a pointer to a bool
-func boolPtr(b bool) *bool {
-	return &b
-}
-
-// intPtr returns a pointer to an int
-func intPtr(i int) *int {
-	return &i
-}
-
 // parseJSONResponse parses JSON from an HTTP response
 func parseJSONResponse(resp *http.Response, v interface{}) error {
 	if resp == nil || resp.Body == nil {

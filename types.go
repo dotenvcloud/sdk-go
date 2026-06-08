@@ -128,26 +128,21 @@ type Links struct {
 }
 
 // Request types
-type CreateSecretRequest struct {
-	ProjectSlug     string  `json:"project_slug"`
-	TargetSlug      *string `json:"target_slug,omitempty"`
-	EnvironmentSlug *string `json:"environment_slug,omitempty"`
-	Key             string  `json:"key"`
-	Value           string  `json:"value"`
-	IsEncrypted     bool    `json:"is_encrypted"`
+
+// StoreSecretsRequest upserts the already-encrypted .env blob for a level
+// (the deepest of project/target/environment provided).
+type StoreSecretsRequest struct {
+	Project     string `json:"project"`
+	Target      string `json:"target,omitempty"`
+	Environment string `json:"environment,omitempty"`
+	Content     string `json:"content"`
 }
 
-type BulkSecretsRequest struct {
-	ProjectSlug string           `json:"project_slug"`
-	Secrets     []BulkSecretItem `json:"secrets"`
-}
-
-type BulkSecretItem struct {
-	Key             string  `json:"key"`
-	Value           string  `json:"value"`
-	TargetSlug      *string `json:"target_slug,omitempty"`
-	EnvironmentSlug *string `json:"environment_slug,omitempty"`
-	IsEncrypted     bool    `json:"is_encrypted"`
+// DeleteSecretsRequest clears the secrets blob for a level.
+type DeleteSecretsRequest struct {
+	Project     string `json:"project"`
+	Target      string `json:"target,omitempty"`
+	Environment string `json:"environment,omitempty"`
 }
 
 // OrganizationCreateRequest represents a request to create an organization
@@ -177,26 +172,12 @@ type RetrieveParams struct {
 	} `json:"filters,omitempty"`
 }
 
-// PushSecretsRequest represents a request to push multiple secrets
-type PushSecretsRequest struct {
-	Secrets     map[string]interface{} `json:"secrets"`
-	Target      string                 `json:"target,omitempty"`
-	Environment string                 `json:"environment,omitempty"`
-}
-
 // Options for API calls
 type ListOptions struct {
 	Page    int
 	PerPage int
 	Sort    string
 	Filter  map[string]string
-}
-
-type SecretOptions struct {
-	IncludeDecrypted bool
-	ResolveHierarchy bool
-	Target           string
-	Environment      string
 }
 
 // EncryptionMode represents the encryption mode

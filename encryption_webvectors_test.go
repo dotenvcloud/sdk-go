@@ -12,8 +12,9 @@ import (
 // to 32 bytes for AES-256-GCM, wire format base64(IV[12] + ciphertext + tag[16]).
 //
 // Regenerate from the web if the contract ever changes:
-//   php artisan tinker --execute='echo app(App\Services\EncryptionService::class)
-//     ->encryptWithProjectKey("HELLO=world\nFOO=bar", "<key>");'
+//
+//	php artisan tinker --execute='echo app(App\Services\EncryptionService::class)
+//	  ->encryptWithProjectKey("HELLO=world\nFOO=bar", "<key>");'
 var webCryptoVectors = []struct {
 	name       string
 	key        string
