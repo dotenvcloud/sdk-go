@@ -6,7 +6,11 @@ import (
 	"net/http"
 )
 
-// SecretsService handles secret operations
+// SecretsService handles secret operations.
+//
+// Secrets are stored as one encrypted .env blob per level (project, target or
+// environment) — mirroring the web app (the source of truth). Reads return the
+// per-level blob; writes upsert/clear the per-level blob.
 type SecretsService struct {
 	client *Client
 }
@@ -92,18 +96,28 @@ func (s *SecretsService) RetrieveSecrets(ctx context.Context, params RetrievePar
 	return secrets, resp, nil
 }
 
-// PushSecrets creates or updates multiple secrets
-func (s *SecretsService) PushSecrets(ctx context.Context, project string, secrets map[string]interface{}) (*http.Response, error) {
+// StoreSecrets upserts the encrypted .env blob for a level (the deepest of
+// project/target/environment provided; target/environment may be empty).
+// content must already be encrypted — it is the inverse of the per-level
+// content returned by GetProjectSecrets. keyProof is the base64 PBKDF2 proof
+// for client-managed projects (empty for server-managed); the server rejects a
+// mismatch so a wrong key cannot silently corrupt secrets.
+func (s *SecretsService) StoreSecrets(ctx context.Context, project, target, environment, content, keyProof string) (*http.Response, error) {
 	if s.client.organization == "" {
 		return nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
-	u := fmt.Sprintf("/api/v1/%s/%s/secrets/push", s.client.organization, project)
+	ctx = withDeepestResource(ctx, project, target, environment)
+	u := fmt.Sprintf("/api/v1/%s/secrets/store", s.client.organization)
 
-	pushReq := PushSecretsRequest{
-		Secrets: secrets,
+	body := StoreSecretsRequest{
+		Project:     project,
+		Target:      target,
+		Environment: environment,
+		Content:     content,
+		KeyProof:    keyProof,
 	}
 
-	req, err := s.client.NewRequest(ctx, "POST", u, pushReq)
+	req, err := s.client.NewRequest(ctx, "POST", u, body)
 	if err != nil {
 		return nil, err
 	}
@@ -111,242 +125,40 @@ func (s *SecretsService) PushSecrets(ctx context.Context, project string, secret
 	return s.client.Do(ctx, req, nil)
 }
 
-// List returns all secrets for a project
-func (s *SecretsService) List(ctx context.Context, projectSlug string, opts *SecretOptions) ([]*Secret, *http.Response, error) {
-	if s.client.organization == "" {
-		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+// withDeepestResource tags the request with the deepest hierarchy level
+// (environment > target > project). On a 404 the error then names the most
+// likely missing resource — e.g. "environment 'production2' not found" — rather
+// than a generic "secret not found", since these endpoints fail when the
+// project/target/environment path can't be resolved.
+func withDeepestResource(ctx context.Context, project, target, environment string) context.Context {
+	switch {
+	case environment != "":
+		return WithRequestResource(ctx, "environment", environment)
+	case target != "":
+		return WithRequestResource(ctx, "target", target)
+	default:
+		return WithRequestResource(ctx, "project", project)
 	}
-	ctx = WithRequestResource(ctx, "secret", "")
-	u := fmt.Sprintf("/api/v1/%s/%s/secrets", s.client.organization, projectSlug)
-
-	// Add query parameters
-	if opts != nil {
-		query := "?"
-		if opts.Target != "" {
-			query += fmt.Sprintf("target=%s&", opts.Target)
-		}
-		if opts.Environment != "" {
-			query += fmt.Sprintf("environment=%s&", opts.Environment)
-		}
-		if opts.IncludeDecrypted {
-			query += "decrypt=true&"
-		}
-		if opts.ResolveHierarchy {
-			query += "resolve=true&"
-		}
-		if len(query) > 1 {
-			u += query[:len(query)-1] // Remove trailing & or ?
-		}
-	}
-
-	req, err := s.client.NewRequest(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var apiResp JSONAPIResponse
-	resp, err := s.client.Do(ctx, req, &apiResp)
-	if err != nil {
-		return nil, resp, err
-	}
-
-	secrets := make([]*Secret, 0)
-	if data, ok := apiResp.Data.([]interface{}); ok {
-		for _, item := range data {
-			if secretData, ok := item.(map[string]interface{}); ok {
-				secret := &Secret{}
-				if attrs, ok := secretData["attributes"].(map[string]interface{}); ok {
-					mapToStruct(attrs, secret)
-					// Set ID from data
-					if id, ok := secretData["id"].(string); ok {
-						secret.ID = id
-					}
-				}
-				secrets = append(secrets, secret)
-			}
-		}
-	}
-
-	return secrets, resp, nil
 }
 
-// Get returns a single secret
-func (s *SecretsService) Get(ctx context.Context, projectSlug, secretKey string) (*Secret, *http.Response, error) {
-	if s.client.organization == "" {
-		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
-	}
-	ctx = WithRequestResource(ctx, "secret", secretKey)
-	u := fmt.Sprintf("/api/v1/%s/%s/secrets/%s", s.client.organization, projectSlug, secretKey)
-
-	req, err := s.client.NewRequest(ctx, "GET", u, nil)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var apiResp JSONAPIResponse
-	resp, err := s.client.Do(ctx, req, &apiResp)
-	if err != nil {
-		return nil, resp, err
-	}
-
-	secret := new(Secret)
-	if data, ok := apiResp.Data.(map[string]interface{}); ok {
-		if attrs, ok := data["attributes"].(map[string]interface{}); ok {
-			mapToStruct(attrs, secret)
-			// Set ID from data
-			if id, ok := data["id"].(string); ok {
-				secret.ID = id
-			}
-		}
-	}
-
-	return secret, resp, nil
-}
-
-// Create creates a new secret using the push endpoint
-// NOTE: Individual secret creation is not supported at the organization level
-// Secrets must be created within a project context using PushSecrets
-func (s *SecretsService) Create(ctx context.Context, req *CreateSecretRequest) (*Secret, *http.Response, error) {
-	if s.client.organization == "" {
-		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
-	}
-	if req.ProjectSlug == "" {
-		return nil, nil, &ErrValidation{Errors: map[string]string{"project": "project slug is required for secret creation"}}
-	}
-
-	// Use the push endpoint for creating individual secrets
-	secrets := map[string]interface{}{
-		req.Key: req.Value,
-	}
-
-	// Additional metadata if needed
-	if req.TargetSlug != nil || req.EnvironmentSlug != nil {
-		secrets = map[string]interface{}{
-			req.Key: map[string]interface{}{
-				"value":            req.Value,
-				"target_slug":      req.TargetSlug,
-				"environment_slug": req.EnvironmentSlug,
-				"is_encrypted":     req.IsEncrypted,
-			},
-		}
-	}
-
-	resp, err := s.PushSecrets(ctx, req.ProjectSlug, secrets)
-	if err != nil {
-		return nil, resp, err
-	}
-
-	// Return a simple response since push doesn't return individual secret details
-	// Note: We're returning slugs in the ID fields for compatibility
-	secret := &Secret{
-		Key:         req.Key,
-		Value:       req.Value,
-		IsEncrypted: req.IsEncrypted,
-	}
-
-	return secret, resp, nil
-}
-
-// Update updates an existing secret
-func (s *SecretsService) Update(ctx context.Context, projectSlug, secretKey string, value string, isEncrypted bool) (*Secret, *http.Response, error) {
-	if s.client.organization == "" {
-		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
-	}
-	ctx = WithRequestResource(ctx, "secret", secretKey)
-	u := fmt.Sprintf("/api/v1/%s/%s/secrets/%s", s.client.organization, projectSlug, secretKey)
-
-	// Wrap in JSON:API format
-	reqData := map[string]interface{}{
-		"data": map[string]interface{}{
-			"type": "secrets",
-			"attributes": map[string]interface{}{
-				"value":        value,
-				"is_encrypted": isEncrypted,
-			},
-		},
-	}
-
-	req, err := s.client.NewRequest(ctx, "PATCH", u, reqData)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	var apiResp JSONAPIResponse
-	resp, err := s.client.Do(ctx, req, &apiResp)
-	if err != nil {
-		return nil, resp, err
-	}
-
-	secret := new(Secret)
-	if data, ok := apiResp.Data.(map[string]interface{}); ok {
-		if attrs, ok := data["attributes"].(map[string]interface{}); ok {
-			mapToStruct(attrs, secret)
-			// Set ID from data
-			if id, ok := data["id"].(string); ok {
-				secret.ID = id
-			}
-		}
-	}
-
-	return secret, resp, nil
-}
-
-// Delete deletes a secret
-func (s *SecretsService) Delete(ctx context.Context, projectSlug, secretKey string) (*http.Response, error) {
+// DeleteSecretLevel clears (deletes) the secrets blob for the deepest provided level.
+func (s *SecretsService) DeleteSecretLevel(ctx context.Context, project, target, environment string) (*http.Response, error) {
 	if s.client.organization == "" {
 		return nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
-	ctx = WithRequestResource(ctx, "secret", secretKey)
-	u := fmt.Sprintf("/api/v1/%s/%s/secrets/%s", s.client.organization, projectSlug, secretKey)
+	ctx = withDeepestResource(ctx, project, target, environment)
+	u := fmt.Sprintf("/api/v1/%s/secrets/delete", s.client.organization)
 
-	req, err := s.client.NewRequest(ctx, "DELETE", u, nil)
+	body := DeleteSecretsRequest{
+		Project:     project,
+		Target:      target,
+		Environment: environment,
+	}
+
+	req, err := s.client.NewRequest(ctx, "POST", u, body)
 	if err != nil {
 		return nil, err
 	}
 
 	return s.client.Do(ctx, req, nil)
-}
-
-// BulkCreate creates multiple secrets using the push endpoint
-// NOTE: Bulk secret creation is done through the project-scoped push endpoint
-func (s *SecretsService) BulkCreate(ctx context.Context, req *BulkSecretsRequest) ([]*Secret, *http.Response, error) {
-	if s.client.organization == "" {
-		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
-	}
-	if req.ProjectSlug == "" {
-		return nil, nil, &ErrValidation{Errors: map[string]string{"project": "project slug is required for bulk secret creation"}}
-	}
-
-	// Convert bulk request to push format
-	secretsMap := make(map[string]interface{})
-	for _, secret := range req.Secrets {
-		if secret.TargetSlug != nil || secret.EnvironmentSlug != nil {
-			secretsMap[secret.Key] = map[string]interface{}{
-				"value":            secret.Value,
-				"target_slug":      secret.TargetSlug,
-				"environment_slug": secret.EnvironmentSlug,
-				"is_encrypted":     secret.IsEncrypted,
-			}
-		} else {
-			secretsMap[secret.Key] = secret.Value
-		}
-	}
-
-	resp, err := s.PushSecrets(ctx, req.ProjectSlug, secretsMap)
-	if err != nil {
-		return nil, resp, err
-	}
-
-	// Return the secrets as provided since push doesn't return individual details
-	secrets := make([]*Secret, 0, len(req.Secrets))
-	for _, s := range req.Secrets {
-		secret := &Secret{
-			Key:         s.Key,
-			Value:       s.Value,
-			IsEncrypted: s.IsEncrypted,
-		}
-		secrets = append(secrets, secret)
-	}
-
-	return secrets, resp, nil
 }

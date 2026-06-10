@@ -98,16 +98,15 @@ func (s *EnvironmentsService) Create(ctx context.Context, projectSlug, targetSlu
 	}
 	u := fmt.Sprintf("/api/v1/%s/%s/%s/environments", s.client.organization, projectSlug, targetSlug)
 
-	// Wrap in JSON:API format
+	// Flat body, matching the API's StoreEnvironmentApiRequest.
 	reqData := map[string]interface{}{
-		"data": map[string]interface{}{
-			"type": "environments",
-			"attributes": map[string]interface{}{
-				"name":        environment.Name,
-				"slug":        environment.Slug,
-				"description": environment.Description,
-			},
-		},
+		"name": environment.Name,
+	}
+	if environment.Status != "" {
+		reqData["status"] = environment.Status
+	}
+	if environment.Description != "" {
+		reqData["description"] = environment.Description
 	}
 
 	req, err := s.client.NewRequest(ctx, "POST", u, reqData)
@@ -143,16 +142,20 @@ func (s *EnvironmentsService) Update(ctx context.Context, projectSlug, targetSlu
 	ctx = WithRequestResource(ctx, "environment", environmentSlug)
 	u := fmt.Sprintf("/api/v1/%s/%s/%s/%s", s.client.organization, projectSlug, targetSlug, environmentSlug)
 
-	// Wrap in JSON:API format
-	reqData := map[string]interface{}{
-		"data": map[string]interface{}{
-			"type": "environments",
-			"id":   environment.ID,
-			"attributes": map[string]interface{}{
-				"name":        environment.Name,
-				"description": environment.Description,
-			},
-		},
+	// Flat body, matching the API's UpdateEnvironmentApiRequest. Only populated
+	// fields are sent so partial (PATCH) updates work.
+	reqData := map[string]interface{}{}
+	if environment.Name != "" {
+		reqData["name"] = environment.Name
+	}
+	if environment.Status != "" {
+		reqData["status"] = environment.Status
+	}
+	if environment.Description != "" {
+		reqData["description"] = environment.Description
+	}
+	if environment.Slug != "" {
+		reqData["slug"] = environment.Slug
 	}
 
 	req, err := s.client.NewRequest(ctx, "PATCH", u, reqData)

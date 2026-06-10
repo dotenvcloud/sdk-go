@@ -74,14 +74,25 @@ type Secret struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
-// EncryptionKey represents an encryption key
+// EncryptionKey represents an encryption key descriptor returned by the
+// encryption-key endpoint.
+//
+//   - Managed == "server": Key holds the raw key.
+//   - Managed == "client": Key is empty (the server never holds it). KeyCheckSalt
+//     and KeyCheckIterations are the PBKDF2 parameters the client uses to compute
+//     the proof it must send on every write (see DeriveKeyProof).
 type EncryptionKey struct {
 	ID              string    `json:"id"`
 	ProjectID       string    `json:"project_id"`
-	Key             string    `json:"key"` // Base64 encoded
+	Key             string    `json:"key"` // server-managed only
 	IsActive        bool      `json:"is_active"`
 	IsClientManaged bool      `json:"is_client_managed"`
 	CreatedAt       time.Time `json:"created_at"`
+
+	Managed            string `json:"managed,omitempty"` // "server" | "client"
+	Version            int    `json:"version,omitempty"`
+	KeyCheckSalt       string `json:"key_check_salt,omitempty"`
+	KeyCheckIterations int    `json:"key_check_iterations,omitempty"`
 }
 
 // API Response Types for JSON:API format
@@ -128,26 +139,36 @@ type Links struct {
 }
 
 // Request types
-type CreateSecretRequest struct {
-	ProjectSlug     string  `json:"project_slug"`
-	TargetSlug      *string `json:"target_slug,omitempty"`
-	EnvironmentSlug *string `json:"environment_slug,omitempty"`
-	Key             string  `json:"key"`
-	Value           string  `json:"value"`
-	IsEncrypted     bool    `json:"is_encrypted"`
+
+// StoreSecretsRequest upserts the already-encrypted .env blob for a level
+// (the deepest of project/target/environment provided).
+type StoreSecretsRequest struct {
+	Project     string `json:"project"`
+	Target      string `json:"target,omitempty"`
+	Environment string `json:"environment,omitempty"`
+	Content     string `json:"content"`
+	// KeyProof proves the client holds the project's key (client-managed only);
+	// the server rejects a mismatch so a wrong key cannot corrupt secrets.
+	KeyProof string `json:"key_proof,omitempty"`
 }
 
-type BulkSecretsRequest struct {
-	ProjectSlug string           `json:"project_slug"`
-	Secrets     []BulkSecretItem `json:"secrets"`
+// ProjectCreateOptions carries encryption setup for project creation. For
+// client-managed projects the client computes the key proof (KeyCheck/Salt/
+// Iterations via DeriveKeyProof) and registers it here so future pushes verify.
+type ProjectCreateOptions struct {
+	StorageMode        string // "server" | "client" (empty defers to the server default)
+	EncryptionKey      string // server-managed: explicit key (else the server generates one)
+	KeyHint            string
+	KeyCheck           string // client-managed: base64 PBKDF2 proof
+	KeyCheckSalt       string // client-managed: base64 salt
+	KeyCheckIterations int    // client-managed: PBKDF2 iteration count
 }
 
-type BulkSecretItem struct {
-	Key             string  `json:"key"`
-	Value           string  `json:"value"`
-	TargetSlug      *string `json:"target_slug,omitempty"`
-	EnvironmentSlug *string `json:"environment_slug,omitempty"`
-	IsEncrypted     bool    `json:"is_encrypted"`
+// DeleteSecretsRequest clears the secrets blob for a level.
+type DeleteSecretsRequest struct {
+	Project     string `json:"project"`
+	Target      string `json:"target,omitempty"`
+	Environment string `json:"environment,omitempty"`
 }
 
 // OrganizationCreateRequest represents a request to create an organization
@@ -177,26 +198,12 @@ type RetrieveParams struct {
 	} `json:"filters,omitempty"`
 }
 
-// PushSecretsRequest represents a request to push multiple secrets
-type PushSecretsRequest struct {
-	Secrets     map[string]interface{} `json:"secrets"`
-	Target      string                 `json:"target,omitempty"`
-	Environment string                 `json:"environment,omitempty"`
-}
-
 // Options for API calls
 type ListOptions struct {
 	Page    int
 	PerPage int
 	Sort    string
 	Filter  map[string]string
-}
-
-type SecretOptions struct {
-	IncludeDecrypted bool
-	ResolveHierarchy bool
-	Target           string
-	Environment      string
 }
 
 // EncryptionMode represents the encryption mode

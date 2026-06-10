@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/pbkdf2"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -19,7 +21,12 @@ type EncryptionService struct {
 	client *Client
 }
 
-// GetEncryptionKey retrieves the encryption key for a project
+// GetEncryptionKey retrieves the encryption key descriptor for a project.
+//
+// Client-managed projects are NOT an error: the descriptor's Managed field is
+// "client" and it carries the PBKDF2 proof parameters (KeyCheckSalt,
+// KeyCheckIterations) instead of a key. Callers decide whether they need to
+// resolve a client key based on Managed/IsClientManaged.
 func (s *EncryptionService) GetEncryptionKey(ctx context.Context, project string) (*EncryptionKey, *http.Response, error) {
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
@@ -41,35 +48,39 @@ func (s *EncryptionService) GetEncryptionKey(ctx context.Context, project string
 	key := new(EncryptionKey)
 	if data, ok := apiResp.Data.(map[string]interface{}); ok {
 		if attrs, ok := data["attributes"].(map[string]interface{}); ok {
-			// The key is now in a JSON string inside the content field
+			// The key descriptor is a JSON string inside the content field.
 			if content, ok := attrs["content"].(string); ok {
-				// Parse the JSON content
 				var contentData map[string]interface{}
 				if err := json.Unmarshal([]byte(content), &contentData); err != nil {
 					return nil, resp, fmt.Errorf("failed to parse encryption key content: %w", err)
 				}
 
-				// Extract the key information
 				if keyData, ok := contentData["key"].(map[string]interface{}); ok {
+					if managed, ok := keyData["managed"].(string); ok {
+						key.Managed = managed
+						key.IsClientManaged = managed == "client"
+					}
+					// Server-managed only.
 					if keyStr, ok := keyData["key"].(string); ok {
 						key.Key = keyStr
 					}
+					// Client-managed only: proof params (never the key).
+					if salt, ok := keyData["key_check_salt"].(string); ok {
+						key.KeyCheckSalt = salt
+					}
+					if iters, ok := keyData["key_check_iterations"].(float64); ok {
+						key.KeyCheckIterations = int(iters)
+					}
 					if version, ok := keyData["version"].(float64); ok {
-						// Store version if needed
-						key.ID = fmt.Sprintf("v%d", int(version))
+						key.Version = int(version)
 					}
 					if createdAt, ok := keyData["created_at"].(string); ok {
-						// Parse created_at if needed
 						if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
 							key.CreatedAt = t
 						}
 					}
 				}
 			}
-
-			// Other attributes are available in attrs if needed:
-			// - format: attrs["format"].(string)
-			// - encrypted: attrs["encrypted"].(bool)
 		}
 
 		// Set ID from data if available
@@ -81,7 +92,14 @@ func (s *EncryptionService) GetEncryptionKey(ctx context.Context, project string
 	return key, resp, nil
 }
 
-// RotateClientKeys initiates client-side key rotation
+// RotateClientKeys initiates client-side key rotation.
+//
+// NOT YET IMPLEMENTED for the current contract: the rotate-client-keys endpoint
+// requires the re-encrypted `secrets` array plus the new key's proof
+// (`key_check`/`key_check_salt`/`key_check_iterations`); this stub sends an empty
+// body and will fail validation. Client-managed rotation via the SDK is a future
+// feature — until then, rotate via the web dashboard. Kept to preserve the API
+// surface; do not rely on it.
 func (s *EncryptionService) RotateClientKeys(ctx context.Context, project string) (*EncryptionKey, *http.Response, error) {
 	if s.client.organization == "" {
 		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
@@ -222,6 +240,45 @@ func Decrypt(ciphertext string, key []byte) (string, error) {
 	return string(plaintext), nil
 }
 
+// --- Canonical project-key crypto (mirrors the web app's EncryptionService) ---
+//
+// The web app (apps/web, App\Services\EncryptionService) is the platform's
+// source of truth for the crypto contract; this SDK mirrors it. A project key
+// is a RAW STRING — it is NEVER hex/base64-decoded. It is used as ASCII bytes,
+// padded with '0' (0x30) or truncated to 32 bytes for AES-256-GCM; wire format
+// is base64(IV[12] + ciphertext + tag[16]). Decoding the key (e.g. hex) would
+// yield different key bytes and fail GCM authentication against data written by
+// the web or JS, so all consumers (the CLI included) must derive keys this way.
+
+// DeriveProjectKey converts a project key string into the 32-byte AES-256 key,
+// mirroring EncryptionService::padKey (str_pad($k, 32, '0') then substr(0, 32)).
+func DeriveProjectKey(key string) []byte {
+	return padKey([]byte(key))
+}
+
+// ErrEmptyKey is returned when an empty project key reaches the crypto layer.
+// An empty key would otherwise pad to a publicly-known constant ('0' x32),
+// encrypting secrets under a key any attacker can reproduce.
+var ErrEmptyKey = errors.New("dotenv: project key must not be empty")
+
+// EncryptWithProjectKey encrypts plaintext with a project key string using
+// AES-256-GCM. Mirror of EncryptionService::encryptWithProjectKey.
+func EncryptWithProjectKey(plaintext, key string) (string, error) {
+	if key == "" {
+		return "", ErrEmptyKey
+	}
+	return Encrypt(plaintext, []byte(key))
+}
+
+// DecryptWithProjectKey decrypts ciphertext produced with a project key string.
+// Mirror of EncryptionService::decryptWithProjectKey.
+func DecryptWithProjectKey(ciphertext, key string) (string, error) {
+	if key == "" {
+		return "", ErrEmptyKey
+	}
+	return Decrypt(ciphertext, []byte(key))
+}
+
 // GenerateKey generates a new 32-byte encryption key
 func GenerateKey() ([]byte, error) {
 	key := make([]byte, 32)
@@ -256,4 +313,101 @@ func padKey(key []byte) []byte {
 		padded[i] = '0'
 	}
 	return padded
+}
+
+// --- Key proof: client-managed key verification ---
+//
+// Second cross-language crypto contract (alongside padKey). For client-managed
+// projects the server never holds the key, so it cannot validate a pushed key
+// directly. Instead the client derives a one-way PROOF; the server stores it and
+// compares on every write (like a password verifier), rejecting mismatches so a
+// mistyped/wrong key can never silently corrupt the project's secrets.
+//
+// The proof is computed over the EFFECTIVE 32-byte AES key (padKey(key)), NOT the
+// raw string — so it matches exactly when the real encryption key matches. PHP
+// (hash_pbkdf2) and JS (WebCrypto deriveBits) MUST produce byte-identical output:
+//
+//	derived = padKey(key)                                   // 32 bytes
+//	proof   = PBKDF2-HMAC-SHA256(derived, salt, iterations, dkLen=32)
+//	wire    = base64(salt), base64(proof), iterations
+
+// KeyProofIterations is the platform-fixed PBKDF2 iteration count for key proofs.
+const KeyProofIterations = 600000
+
+const (
+	keyProofSaltLen = 16
+	keyProofDKLen   = 32
+)
+
+// DeriveKeyProof computes the base64 key proof for a key string given a
+// base64-encoded salt and an iteration count. A zero/negative iteration count
+// falls back to KeyProofIterations. Used when VERIFYING a key before a push.
+func DeriveKeyProof(key, saltB64 string, iterations int) (string, error) {
+	salt, err := base64.StdEncoding.DecodeString(saltB64)
+	if err != nil {
+		return "", fmt.Errorf("invalid key proof salt: %w", err)
+	}
+	if iterations <= 0 {
+		iterations = KeyProofIterations
+	}
+	proof, err := pbkdf2.Key(sha256.New, string(padKey([]byte(key))), salt, iterations, keyProofDKLen)
+	if err != nil {
+		return "", fmt.Errorf("derive key proof: %w", err)
+	}
+	return base64.StdEncoding.EncodeToString(proof), nil
+}
+
+// dataKeyDKLen is the AES-256 key length (bytes) derived for client-managed
+// projects.
+const dataKeyDKLen = 32
+
+// DeriveDataKey derives the 32-byte AES-256 data key for a client-managed
+// project from a passphrase, using PBKDF2-HMAC-SHA256 over the project's salt
+// and iteration count.
+//
+// This replaces the legacy padKey derivation (raw passphrase '0'-padded to 32
+// bytes, with no salt and no stretching) for client-managed encryption. padKey
+// made a weak/short passphrase trivially brute-forceable offline against stolen
+// ciphertext and reused the same AES key across projects with the same
+// passphrase. PBKDF2 salts (per project) and stretches (iterations) the
+// passphrase, raising offline brute force to `iterations` rounds per guess.
+//
+// Cross-language contract — MUST match the browser's EncryptionUtils.deriveDataKey
+// byte-for-byte:
+//
+//	salt   = base64decode(saltB64)
+//	aesKey = PBKDF2-HMAC-SHA256(passphrase, salt, iterations, dkLen=32)
+//
+// The passphrase is used as raw UTF-8 bytes — NOT padKey'd; that padding is the
+// weakness being removed. A zero/negative iteration count falls back to
+// KeyProofIterations. The salt/iterations are the project's existing
+// key_check_salt / key_check_iterations, so no new key material is needed.
+func DeriveDataKey(passphrase, saltB64 string, iterations int) ([]byte, error) {
+	salt, err := base64.StdEncoding.DecodeString(saltB64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid data key salt: %w", err)
+	}
+	if iterations <= 0 {
+		iterations = KeyProofIterations
+	}
+	key, err := pbkdf2.Key(sha256.New, passphrase, salt, iterations, dataKeyDKLen)
+	if err != nil {
+		return nil, fmt.Errorf("derive data key: %w", err)
+	}
+	return key, nil
+}
+
+// GenerateKeyProof creates a fresh random salt and the matching proof for a key
+// string, returning base64 salt, base64 proof and the iteration count. Used when
+// ESTABLISHING a client-managed key (project create / key rotation).
+func GenerateKeyProof(key string) (saltB64, proofB64 string, iterations int, err error) {
+	salt := make([]byte, keyProofSaltLen)
+	if _, err = io.ReadFull(rand.Reader, salt); err != nil {
+		return "", "", 0, err
+	}
+	proof, err := pbkdf2.Key(sha256.New, string(padKey([]byte(key))), salt, KeyProofIterations, keyProofDKLen)
+	if err != nil {
+		return "", "", 0, err
+	}
+	return base64.StdEncoding.EncodeToString(salt), base64.StdEncoding.EncodeToString(proof), KeyProofIterations, nil
 }
