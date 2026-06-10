@@ -256,15 +256,26 @@ func DeriveProjectKey(key string) []byte {
 	return padKey([]byte(key))
 }
 
+// ErrEmptyKey is returned when an empty project key reaches the crypto layer.
+// An empty key would otherwise pad to a publicly-known constant ('0' x32),
+// encrypting secrets under a key any attacker can reproduce.
+var ErrEmptyKey = errors.New("dotenv: project key must not be empty")
+
 // EncryptWithProjectKey encrypts plaintext with a project key string using
 // AES-256-GCM. Mirror of EncryptionService::encryptWithProjectKey.
 func EncryptWithProjectKey(plaintext, key string) (string, error) {
+	if key == "" {
+		return "", ErrEmptyKey
+	}
 	return Encrypt(plaintext, []byte(key))
 }
 
 // DecryptWithProjectKey decrypts ciphertext produced with a project key string.
 // Mirror of EncryptionService::decryptWithProjectKey.
 func DecryptWithProjectKey(ciphertext, key string) (string, error) {
+	if key == "" {
+		return "", ErrEmptyKey
+	}
 	return Decrypt(ciphertext, []byte(key))
 }
 
@@ -344,6 +355,46 @@ func DeriveKeyProof(key, saltB64 string, iterations int) (string, error) {
 		return "", fmt.Errorf("derive key proof: %w", err)
 	}
 	return base64.StdEncoding.EncodeToString(proof), nil
+}
+
+// dataKeyDKLen is the AES-256 key length (bytes) derived for client-managed
+// projects.
+const dataKeyDKLen = 32
+
+// DeriveDataKey derives the 32-byte AES-256 data key for a client-managed
+// project from a passphrase, using PBKDF2-HMAC-SHA256 over the project's salt
+// and iteration count.
+//
+// This replaces the legacy padKey derivation (raw passphrase '0'-padded to 32
+// bytes, with no salt and no stretching) for client-managed encryption. padKey
+// made a weak/short passphrase trivially brute-forceable offline against stolen
+// ciphertext and reused the same AES key across projects with the same
+// passphrase. PBKDF2 salts (per project) and stretches (iterations) the
+// passphrase, raising offline brute force to `iterations` rounds per guess.
+//
+// Cross-language contract — MUST match the browser's EncryptionUtils.deriveDataKey
+// byte-for-byte:
+//
+//	salt   = base64decode(saltB64)
+//	aesKey = PBKDF2-HMAC-SHA256(passphrase, salt, iterations, dkLen=32)
+//
+// The passphrase is used as raw UTF-8 bytes — NOT padKey'd; that padding is the
+// weakness being removed. A zero/negative iteration count falls back to
+// KeyProofIterations. The salt/iterations are the project's existing
+// key_check_salt / key_check_iterations, so no new key material is needed.
+func DeriveDataKey(passphrase, saltB64 string, iterations int) ([]byte, error) {
+	salt, err := base64.StdEncoding.DecodeString(saltB64)
+	if err != nil {
+		return nil, fmt.Errorf("invalid data key salt: %w", err)
+	}
+	if iterations <= 0 {
+		iterations = KeyProofIterations
+	}
+	key, err := pbkdf2.Key(sha256.New, passphrase, salt, iterations, dataKeyDKLen)
+	if err != nil {
+		return nil, fmt.Errorf("derive data key: %w", err)
+	}
+	return key, nil
 }
 
 // GenerateKeyProof creates a fresh random salt and the matching proof for a key

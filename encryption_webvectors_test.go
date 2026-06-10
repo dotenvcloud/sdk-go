@@ -2,6 +2,7 @@ package dotenv
 
 import (
 	"bytes"
+	"encoding/base64"
 	"testing"
 )
 
@@ -64,6 +65,54 @@ func TestProjectKeyRoundTrip(t *testing.T) {
 				t.Fatalf("round-trip got %q, want %q", pt, "SECRET=value")
 			}
 		})
+	}
+}
+
+// TestDeriveDataKeyVector locks the client-managed data-key KDF contract
+// (PBKDF2-HMAC-SHA256, raw passphrase, 32-byte output) to a vector computed
+// independently of this code:
+//
+//	python3 -c 'import hashlib,base64; \
+//	  print(base64.b64encode(hashlib.pbkdf2_hmac("sha256", \
+//	  b"correct horse battery staple", bytes(range(16)), 1000, 32)).decode())'
+//
+// The browser's EncryptionUtils.deriveDataKey (WebCrypto PBKDF2) must produce
+// the same bytes for the same passphrase/salt/iterations, or CLI and browser
+// cannot decrypt each other's client-managed secrets.
+func TestDeriveDataKeyVector(t *testing.T) {
+	saltB64 := "AAECAwQFBgcICQoLDA0ODw==" // bytes 0x00..0x0f
+	wantB64 := "ppsXnjrdPB4KryJ6DrOqKqhkWrhv7PbKAMF1Eml8cZ4="
+
+	got, err := DeriveDataKey("correct horse battery staple", saltB64, 1000)
+	if err != nil {
+		t.Fatalf("DeriveDataKey: %v", err)
+	}
+	if len(got) != 32 {
+		t.Fatalf("derived key length = %d, want 32", len(got))
+	}
+	if gotB64 := base64.StdEncoding.EncodeToString(got); gotB64 != wantB64 {
+		t.Fatalf("DeriveDataKey mismatch:\n got  %s\n want %s", gotB64, wantB64)
+	}
+}
+
+// TestDataKeyRoundTrip confirms a passphrase-derived key encrypts and decrypts
+// through the AES-256-GCM layer (the derived key is exactly 32 bytes, so the
+// crypto layer's padKey is a no-op on it).
+func TestDataKeyRoundTrip(t *testing.T) {
+	key, err := DeriveDataKey("hunter2", "AAECAwQFBgcICQoLDA0ODw==", 1000)
+	if err != nil {
+		t.Fatalf("DeriveDataKey: %v", err)
+	}
+	ct, err := EncryptWithProjectKey("SECRET=value", string(key))
+	if err != nil {
+		t.Fatalf("EncryptWithProjectKey: %v", err)
+	}
+	pt, err := DecryptWithProjectKey(ct, string(key))
+	if err != nil {
+		t.Fatalf("DecryptWithProjectKey: %v", err)
+	}
+	if pt != "SECRET=value" {
+		t.Fatalf("round-trip got %q, want %q", pt, "SECRET=value")
 	}
 }
 
