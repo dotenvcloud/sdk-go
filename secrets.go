@@ -141,6 +141,32 @@ func withDeepestResource(ctx context.Context, project, target, environment strin
 	}
 }
 
+// StoreSecretsWithOptions is StoreSecrets with a noBackup flag that skips writing
+// a backup version for this write.
+func (s *SecretsService) StoreSecretsWithOptions(ctx context.Context, project, target, environment, content, keyProof string, noBackup bool) (*http.Response, error) {
+	if s.client.organization == "" {
+		return nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	ctx = withDeepestResource(ctx, project, target, environment)
+	u := fmt.Sprintf("/api/v1/%s/secrets/store", s.client.organization)
+
+	body := StoreSecretsRequest{
+		Project:     project,
+		Target:      target,
+		Environment: environment,
+		Content:     content,
+		KeyProof:    keyProof,
+		NoBackup:    noBackup,
+	}
+
+	req, err := s.client.NewRequest(ctx, "POST", u, body)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.client.Do(ctx, req, nil)
+}
+
 // DeleteSecretLevel clears (deletes) the secrets blob for the deepest provided level.
 func (s *SecretsService) DeleteSecretLevel(ctx context.Context, project, target, environment string) (*http.Response, error) {
 	if s.client.organization == "" {
@@ -153,6 +179,32 @@ func (s *SecretsService) DeleteSecretLevel(ctx context.Context, project, target,
 		Project:     project,
 		Target:      target,
 		Environment: environment,
+	}
+
+	req, err := s.client.NewRequest(ctx, "POST", u, body)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.client.Do(ctx, req, nil)
+}
+
+// DeleteSecretLevelWithOptions is DeleteSecretLevel with a noBackup flag. When
+// noBackup is true the level's history is purged and the row hard-deleted, so
+// confirmed is sent as required by the server.
+func (s *SecretsService) DeleteSecretLevelWithOptions(ctx context.Context, project, target, environment string, noBackup bool) (*http.Response, error) {
+	if s.client.organization == "" {
+		return nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	ctx = withDeepestResource(ctx, project, target, environment)
+	u := fmt.Sprintf("/api/v1/%s/secrets/delete", s.client.organization)
+
+	body := DeleteSecretsRequest{
+		Project:     project,
+		Target:      target,
+		Environment: environment,
+		NoBackup:    noBackup,
+		Confirmed:   noBackup,
 	}
 
 	req, err := s.client.NewRequest(ctx, "POST", u, body)

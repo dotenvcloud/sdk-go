@@ -7,6 +7,7 @@ import (
 	"crypto/pbkdf2"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -92,44 +93,155 @@ func (s *EncryptionService) GetEncryptionKey(ctx context.Context, project string
 	return key, resp, nil
 }
 
-// RotateClientKeys initiates client-side key rotation.
-//
-// NOT YET IMPLEMENTED for the current contract: the rotate-client-keys endpoint
-// requires the re-encrypted `secrets` array plus the new key's proof
-// (`key_check`/`key_check_salt`/`key_check_iterations`); this stub sends an empty
-// body and will fail validation. Client-managed rotation via the SDK is a future
-// feature — until then, rotate via the web dashboard. Kept to preserve the API
-// surface; do not rely on it.
-func (s *EncryptionService) RotateClientKeys(ctx context.Context, project string) (*EncryptionKey, *http.Response, error) {
+// RotateClientKeys rotates a client-managed key: the client re-encrypts the
+// current secrets under a new key and submits them with the new key's proof. The
+// server rolls over to a new key row, preserving the old one so historical
+// versions stay decryptable. Set req.HistoryPolicy to "re_encrypt" to also move
+// historical versions onto the new key (drive the move via ListPendingReencrypt /
+// SubmitReencryptedHistory).
+func (s *EncryptionService) RotateClientKeys(ctx context.Context, project string, req ClientKeyRotationRequest) (*http.Response, error) {
 	if s.client.organization == "" {
-		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+		return nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
 	}
 	ctx = WithRequestResource(ctx, "encryption_key", project)
 	u := fmt.Sprintf("/api/v1/%s/%s/secrets/rotate-client-keys", s.client.organization, project)
 
-	req, err := s.client.NewRequest(ctx, "POST", u, nil)
+	httpReq, err := s.client.NewRequest(ctx, "POST", u, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.client.Do(ctx, httpReq, nil)
+}
+
+// RotateEncryptionKey rotates a server-managed key. Set opts.HistoryPolicy to
+// "re_encrypt" to re-encrypt historical versions onto the new key server-side.
+func (s *EncryptionService) RotateEncryptionKey(ctx context.Context, project string, opts *RotateOptions) (*EncryptionKey, *http.Response, error) {
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	ctx = WithRequestResource(ctx, "encryption_key", project)
+	u := fmt.Sprintf("/api/v1/%s/%s/encryption-key/rotate", s.client.organization, project)
+
+	var body interface{}
+	if opts != nil {
+		body = opts
+	}
+
+	httpReq, err := s.client.NewRequest(ctx, "POST", u, body)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	var apiResp JSONAPIResponse
-	resp, err := s.client.Do(ctx, req, &apiResp)
+	var env struct {
+		Data struct {
+			Key struct {
+				ID         string        `json:"id"`
+				Attributes EncryptionKey `json:"attributes"`
+			} `json:"key"`
+		} `json:"data"`
+	}
+	resp, err := s.client.Do(ctx, httpReq, &env)
 	if err != nil {
 		return nil, resp, err
 	}
 
-	key := new(EncryptionKey)
-	if data, ok := apiResp.Data.(map[string]interface{}); ok {
-		if attrs, ok := data["attributes"].(map[string]interface{}); ok {
-			mapToStruct(attrs, key)
-			// Set ID from data
-			if id, ok := data["id"].(string); ok {
-				key.ID = id
-			}
-		}
+	key := env.Data.Key.Attributes
+	key.ID = env.Data.Key.ID
+
+	return &key, resp, nil
+}
+
+// GetKeyHistory lists the project's encryption key versions, newest first. For
+// client-managed keys each entry carries the proof params so a caller can validate
+// a user-supplied old key with VerifyKeyProof before decrypting an old version.
+func (s *EncryptionService) GetKeyHistory(ctx context.Context, project string) ([]*EncryptionKeyVersion, *http.Response, error) {
+	if s.client.organization == "" {
+		return nil, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	ctx = WithRequestResource(ctx, "encryption_key", project)
+	u := fmt.Sprintf("/api/v1/%s/%s/encryption-key/history", s.client.organization, project)
+
+	req, err := s.client.NewRequest(ctx, "GET", u, nil)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return key, resp, nil
+	var env struct {
+		Data []*EncryptionKeyVersion `json:"data"`
+	}
+	resp, err := s.client.Do(ctx, req, &env)
+	if err != nil {
+		return nil, resp, err
+	}
+
+	return env.Data, resp, nil
+}
+
+// ListPendingReencrypt returns up to limit client-managed historical versions
+// awaiting re-encryption onto the current key, plus the total remaining.
+func (s *EncryptionService) ListPendingReencrypt(ctx context.Context, project string, limit int) ([]PendingVersion, int, *http.Response, error) {
+	if s.client.organization == "" {
+		return nil, 0, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	ctx = WithRequestResource(ctx, "encryption_key", project)
+	u := fmt.Sprintf("/api/v1/%s/%s/secrets/re-encrypt-history/pending", s.client.organization, project)
+
+	body := map[string]interface{}{}
+	if limit > 0 {
+		body["limit"] = limit
+	}
+
+	req, err := s.client.NewRequest(ctx, "POST", u, body)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+
+	var env struct {
+		Data []PendingVersion `json:"data"`
+		Meta struct {
+			Remaining int `json:"remaining"`
+		} `json:"meta"`
+	}
+	resp, err := s.client.Do(ctx, req, &env)
+	if err != nil {
+		return nil, 0, resp, err
+	}
+
+	return env.Data, env.Meta.Remaining, resp, nil
+}
+
+// SubmitReencryptedHistory submits versions re-encrypted under the current key,
+// proven by keyProof, returning how many were updated and how many remain.
+func (s *EncryptionService) SubmitReencryptedHistory(ctx context.Context, project string, versions []ReencryptedVersion, keyProof string) (updated, remaining int, resp *http.Response, err error) {
+	if s.client.organization == "" {
+		return 0, 0, nil, &ErrValidation{Errors: map[string]string{"organization": "organization context is required"}}
+	}
+	ctx = WithRequestResource(ctx, "encryption_key", project)
+	u := fmt.Sprintf("/api/v1/%s/%s/secrets/re-encrypt-history", s.client.organization, project)
+
+	body := map[string]interface{}{
+		"versions":  versions,
+		"key_proof": keyProof,
+	}
+
+	req, err := s.client.NewRequest(ctx, "POST", u, body)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+
+	var env struct {
+		Data struct {
+			Updated   int `json:"updated"`
+			Remaining int `json:"remaining"`
+		} `json:"data"`
+	}
+	resp, err = s.client.Do(ctx, req, &env)
+	if err != nil {
+		return 0, 0, resp, err
+	}
+
+	return env.Data.Updated, env.Data.Remaining, resp, nil
 }
 
 // Encrypt encrypts data using AES-256-GCM.
@@ -410,4 +522,16 @@ func GenerateKeyProof(key string) (saltB64, proofB64 string, iterations int, err
 		return "", "", 0, err
 	}
 	return base64.StdEncoding.EncodeToString(salt), base64.StdEncoding.EncodeToString(proof), KeyProofIterations, nil
+}
+
+// VerifyKeyProof reports whether key matches the stored proof for the given salt
+// and iteration count, using a constant-time comparison. Used to validate a
+// user-supplied old key locally (against a key-history descriptor) before
+// attempting to decrypt an old version — a wrong key is rejected up front.
+func VerifyKeyProof(key, saltB64 string, iterations int, expectedProofB64 string) (bool, error) {
+	got, err := DeriveKeyProof(key, saltB64, iterations)
+	if err != nil {
+		return false, err
+	}
+	return subtle.ConstantTimeCompare([]byte(got), []byte(expectedProofB64)) == 1, nil
 }

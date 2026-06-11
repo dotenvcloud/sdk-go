@@ -69,16 +69,17 @@ type Client struct {
 	userAgent    string
 
 	// Service endpoints
-	Organizations *OrganizationsService
-	Projects      *ProjectsService
-	Targets       *TargetsService
-	Environments  *EnvironmentsService
-	Secrets       *SecretsService
-	Encryption    *EncryptionService
-	OAuth         *OAuthService
-	User          *UserService
-	APIKeys       *APIKeysService
-	Telemetry     *TelemetryService
+	Organizations  *OrganizationsService
+	Projects       *ProjectsService
+	Targets        *TargetsService
+	Environments   *EnvironmentsService
+	Secrets        *SecretsService
+	SecretVersions *SecretVersionsService
+	Encryption     *EncryptionService
+	OAuth          *OAuthService
+	User           *UserService
+	APIKeys        *APIKeysService
+	Telemetry      *TelemetryService
 }
 
 // ClientOption allows customization of the client
@@ -172,6 +173,7 @@ func NewClient(opts ...ClientOption) *Client {
 	c.Targets = &TargetsService{client: c}
 	c.Environments = &EnvironmentsService{client: c}
 	c.Secrets = &SecretsService{client: c}
+	c.SecretVersions = &SecretVersionsService{client: c}
 	c.Encryption = &EncryptionService{client: c}
 	c.OAuth = &OAuthService{client: c}
 	c.User = &UserService{client: c}
