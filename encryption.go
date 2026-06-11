@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -136,8 +137,16 @@ func (s *EncryptionService) RotateEncryptionKey(ctx context.Context, project str
 	var env struct {
 		Data struct {
 			Key struct {
-				ID         string        `json:"id"`
-				Attributes EncryptionKey `json:"attributes"`
+				ID         string `json:"id"`
+				Attributes struct {
+					EncryptionKey
+					// The resource's attributes diverge from the SDK struct's
+					// types: id is NUMERIC (row id) and version is a STRING.
+					// Shadow both so embedding EncryptionKey doesn't fail to
+					// unmarshal, then convert below.
+					ID      json.RawMessage `json:"id"`
+					Version string          `json:"version"`
+				} `json:"attributes"`
 			} `json:"key"`
 		} `json:"data"`
 	}
@@ -146,8 +155,11 @@ func (s *EncryptionService) RotateEncryptionKey(ctx context.Context, project str
 		return nil, resp, err
 	}
 
-	key := env.Data.Key.Attributes
+	key := env.Data.Key.Attributes.EncryptionKey
 	key.ID = env.Data.Key.ID
+	if v, convErr := strconv.Atoi(env.Data.Key.Attributes.Version); convErr == nil {
+		key.Version = v
+	}
 
 	return &key, resp, nil
 }

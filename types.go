@@ -251,14 +251,22 @@ type ReencryptedVersion struct {
 	Content string `json:"content"`
 }
 
+// RotatedSecret is one secret re-encrypted under the NEW key during a
+// client-managed rotation. The ID is a string per the API contract (distinct
+// from ReencryptedVersion, whose integer IDs identify version rows).
+type RotatedSecret struct {
+	ID      string `json:"id"`
+	Content string `json:"content"`
+}
+
 // ClientKeyRotationRequest rotates a client-managed key: the re-encrypted current
 // secrets plus the new key's proof, and an optional history policy.
 type ClientKeyRotationRequest struct {
-	Secrets            []ReencryptedVersion `json:"secrets"`
-	KeyCheck           string               `json:"key_check"`
-	KeyCheckSalt       string               `json:"key_check_salt"`
-	KeyCheckIterations int                  `json:"key_check_iterations"`
-	HistoryPolicy      string               `json:"history_policy,omitempty"`
+	Secrets            []RotatedSecret `json:"secrets"`
+	KeyCheck           string          `json:"key_check"`
+	KeyCheckSalt       string          `json:"key_check_salt"`
+	KeyCheckIterations int             `json:"key_check_iterations"`
+	HistoryPolicy      string          `json:"history_policy,omitempty"`
 }
 
 // RotateOptions controls server-managed key rotation.
