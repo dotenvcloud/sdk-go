@@ -52,6 +52,19 @@ var (
 	// ErrKeyProofRequired — server returned `key_proof_required`: a client-managed
 	// project has no key verification configured yet (re-establish its key).
 	ErrKeyProofRequired = errors.New("project has no key verification configured")
+
+	// ErrKeyVersionConflict — server returned `key_version_conflict`: a re-encrypt
+	// submission raced a rotation; refetch the pending set and retry.
+	ErrKeyVersionConflict = errors.New("key version conflict; refetch pending versions and retry")
+
+	// ErrContentRequiredForOldKey — server returned `content_required_for_old_key`:
+	// restoring a client-managed old-key version requires the version re-encrypted
+	// under the current key plus the current key proof.
+	ErrContentRequiredForOldKey = errors.New("client re-encrypted content required to restore this old-key version")
+
+	// ErrVersionProtected — server returned `version_protected`: refusing to delete
+	// the only restore snapshot of a deleted secret.
+	ErrVersionProtected = errors.New("version is the only restore snapshot of a deleted secret")
 )
 
 // errCodeMap maps server-side machine codes to SDK sentinel errors. Codes
@@ -62,6 +75,9 @@ var errCodeMap = map[string]error{
 	"no_active_encryption_key":      ErrNoActiveEncryptionKey,
 	"key_proof_mismatch":            ErrKeyProofMismatch,
 	"key_proof_required":            ErrKeyProofRequired,
+	"key_version_conflict":          ErrKeyVersionConflict,
+	"content_required_for_old_key":  ErrContentRequiredForOldKey,
+	"version_protected":             ErrVersionProtected,
 }
 
 // ErrAPI wraps an ErrorResponse with a sentinel for `errors.Is` while keeping

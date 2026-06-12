@@ -93,8 +93,19 @@ export DOTENV_BASE_URL=https://dotenv.test
 - `Environments.List(ctx, projectSlug, targetSlug, opts)` - List environments
 
 ### Encryption
-- `GetEncryptionKey(ctx, project)` - Get encryption key for a project
-- `RotateClientKeys(ctx, project)` - Rotate client-side encryption keys
+- `GetEncryptionKey(ctx, project)` - Get the active encryption key descriptor
+- `GetKeyHistory(ctx, project)` - List encryption key version history
+- `RotateEncryptionKey(ctx, project, opts)` - Rotate a server-managed key
+- `RotateClientKeys(ctx, project, req)` - Rotate a client-managed key
+- `ListPendingReencrypt(ctx, project, limit)` / `SubmitReencryptedHistory(...)` - Client-driven history re-encryption
+- `VerifyKeyProof(key, salt, iterations, proof)` - Validate a key against a stored proof
+
+### Secret Versions
+- `SecretVersions.List(ctx, project, target, environment, opts)` - List backup version history
+- `SecretVersions.Get(ctx, versionID)` - Fetch a version (encrypted content + key descriptor)
+- `SecretVersions.Restore(ctx, versionID, req)` - Restore a version (append-only)
+- `SecretVersions.Delete(ctx, versionID)` - Delete a single version
+- `SecretVersions.PurgeHistory(ctx, req)` - Purge level/project history
 
 ## Encryption
 

@@ -150,6 +150,8 @@ type StoreSecretsRequest struct {
 	// KeyProof proves the client holds the project's key (client-managed only);
 	// the server rejects a mismatch so a wrong key cannot corrupt secrets.
 	KeyProof string `json:"key_proof,omitempty"`
+	// NoBackup skips writing a backup version for this write.
+	NoBackup bool `json:"no_backup,omitempty"`
 }
 
 // ProjectCreateOptions carries encryption setup for project creation. For
@@ -169,6 +171,107 @@ type DeleteSecretsRequest struct {
 	Project     string `json:"project"`
 	Target      string `json:"target,omitempty"`
 	Environment string `json:"environment,omitempty"`
+	// NoBackup purges history and hard-deletes; requires Confirmed.
+	NoBackup  bool `json:"no_backup,omitempty"`
+	Confirmed bool `json:"confirmed,omitempty"`
+}
+
+// SecretVersion is the metadata of a single backup version (no content).
+type SecretVersion struct {
+	ID                   string                 `json:"-"`
+	Action               string                 `json:"action"`
+	SizeBytes            int                    `json:"size_bytes"`
+	IsClientEncrypted    bool                   `json:"is_client_encrypted"`
+	EncryptionKeyVersion string                 `json:"encryption_key_version"`
+	KeyVersion           string                 `json:"key_version,omitempty"`
+	CreatedAt            string                 `json:"created_at"`
+	CreatedBy            *VersionActor          `json:"created_by,omitempty"`
+	Metadata             map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// VersionActor identifies who created a version.
+type VersionActor struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+}
+
+// SecretVersionContent is a version plus its encrypted blob and key descriptor.
+type SecretVersionContent struct {
+	SecretVersion
+	Content string                `json:"content"`
+	Key     *EncryptionKeyVersion `json:"key,omitempty"`
+}
+
+// EncryptionKeyVersion is one key in the project's key history. It never exposes
+// server-managed key material; for client-managed keys it carries the proof so
+// callers can validate a user-supplied old key locally.
+type EncryptionKeyVersion struct {
+	Version            string `json:"version"`
+	Managed            string `json:"managed"`
+	KeyCheck           string `json:"key_check,omitempty"`
+	KeyCheckSalt       string `json:"key_check_salt,omitempty"`
+	KeyCheckIterations int    `json:"key_check_iterations,omitempty"`
+	IsActive           bool   `json:"is_active"`
+	CreatedAt          string `json:"created_at"`
+	RotatedAt          string `json:"rotated_at,omitempty"`
+}
+
+// VersionListOptions controls version history pagination.
+type VersionListOptions struct {
+	Page    int
+	PerPage int
+}
+
+// RestoreVersionRequest carries the optional client re-encrypted content and the
+// current key proof, needed only when restoring a client-managed old-key version.
+type RestoreVersionRequest struct {
+	Content  string `json:"content,omitempty"`
+	KeyProof string `json:"key_proof,omitempty"`
+}
+
+// PurgeHistoryRequest purges version history for a level or the whole project.
+type PurgeHistoryRequest struct {
+	Project     string `json:"project"`
+	Target      string `json:"target,omitempty"`
+	Environment string `json:"environment,omitempty"`
+	Scope       string `json:"scope,omitempty"` // "level" (default) | "project"
+	Confirmed   bool   `json:"confirmed"`
+}
+
+// PendingVersion is a historical version awaiting client re-encryption.
+type PendingVersion struct {
+	ID         int    `json:"id"`
+	Content    string `json:"content"`
+	KeyVersion string `json:"key_version"`
+}
+
+// ReencryptedVersion is a version re-encrypted under the current key by the client.
+type ReencryptedVersion struct {
+	ID      int    `json:"id"`
+	Content string `json:"content"`
+}
+
+// RotatedSecret is one secret re-encrypted under the NEW key during a
+// client-managed rotation. The ID is a string per the API contract (distinct
+// from ReencryptedVersion, whose integer IDs identify version rows).
+type RotatedSecret struct {
+	ID      string `json:"id"`
+	Content string `json:"content"`
+}
+
+// ClientKeyRotationRequest rotates a client-managed key: the re-encrypted current
+// secrets plus the new key's proof, and an optional history policy.
+type ClientKeyRotationRequest struct {
+	Secrets            []RotatedSecret `json:"secrets"`
+	KeyCheck           string          `json:"key_check"`
+	KeyCheckSalt       string          `json:"key_check_salt"`
+	KeyCheckIterations int             `json:"key_check_iterations"`
+	HistoryPolicy      string          `json:"history_policy,omitempty"`
+}
+
+// RotateOptions controls server-managed key rotation.
+type RotateOptions struct {
+	HistoryPolicy string `json:"history_policy,omitempty"` // "keep" | "re_encrypt"
 }
 
 // OrganizationCreateRequest represents a request to create an organization
