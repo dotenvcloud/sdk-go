@@ -187,6 +187,12 @@ type SecretVersion struct {
 	CreatedAt            string                 `json:"created_at"`
 	CreatedBy            *VersionActor          `json:"created_by,omitempty"`
 	Metadata             map[string]interface{} `json:"metadata,omitempty"`
+	// Locked is true when this version is outside the organization plan's
+	// retention window: its metadata is still listed, but Get/Restore return
+	// ErrVersionLocked until the plan is upgraded. Older servers omit the field
+	// (defaults to false).
+	Locked       bool   `json:"locked,omitempty"`
+	LockedReason string `json:"locked_reason,omitempty"`
 }
 
 // VersionActor identifies who created a version.

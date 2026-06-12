@@ -173,6 +173,29 @@ func TestClient_InvalidParameterCombination_TypedError(t *testing.T) {
 	assert.True(t, dotenv.IsInvalidParameterCombination(err))
 }
 
+// A 403 carrying {"error":"version_locked"} must resolve to the ErrVersionLocked
+// sentinel, NOT be shadowed by the generic 403→ErrForbidden status mapping —
+// checkResponse matches the envelope code before the status switch.
+func TestClient_VersionLocked_TypedError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"error":"version_locked","message":"outside your plan window","details":{"retention_days":30}}`))
+	}))
+	defer server.Close()
+
+	client := dotenv.NewClient(
+		dotenv.WithAPIKey("k"),
+		dotenv.WithBaseURL(server.URL),
+		dotenv.WithOrganization("o"),
+	)
+
+	_, _, err := client.SecretVersions.Get(context.Background(), "1")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, dotenv.ErrVersionLocked), "errors.Is should match ErrVersionLocked on a 403 version_locked; got %v", err)
+	assert.False(t, dotenv.IsForbidden(err), "must not be shadowed by the generic 403 ErrForbidden mapping")
+}
+
 // F-19: unknown machine codes fall through to ErrorResponse / status mapping.
 func TestClient_UnknownErrorCode_FallsThrough(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

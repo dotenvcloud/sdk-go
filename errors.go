@@ -65,6 +65,11 @@ var (
 	// ErrVersionProtected — server returned `version_protected`: refusing to delete
 	// the only restore snapshot of a deleted secret.
 	ErrVersionProtected = errors.New("version is the only restore snapshot of a deleted secret")
+
+	// ErrVersionLocked — server returned `version_locked`: the version is outside
+	// the organization plan's history retention window. Its metadata is still
+	// listed, but fetching its content or restoring it requires a plan upgrade.
+	ErrVersionLocked = errors.New("version is outside the plan's history retention window")
 )
 
 // errCodeMap maps server-side machine codes to SDK sentinel errors. Codes
@@ -78,6 +83,7 @@ var errCodeMap = map[string]error{
 	"key_version_conflict":          ErrKeyVersionConflict,
 	"content_required_for_old_key":  ErrContentRequiredForOldKey,
 	"version_protected":             ErrVersionProtected,
+	"version_locked":                ErrVersionLocked,
 }
 
 // ErrAPI wraps an ErrorResponse with a sentinel for `errors.Is` while keeping
