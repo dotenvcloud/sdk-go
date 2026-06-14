@@ -1,125 +1,66 @@
 package dotenv
 
 import (
+	"bytes"
 	"context"
-	"fmt"
+	"encoding/json"
+	"io"
 	"net/http"
-	"time"
 )
 
-// TelemetryService handles telemetry operations
+// TelemetryService handles telemetry operations.
 type TelemetryService struct {
 	client *Client
 }
 
-// TelemetryEvent represents a single telemetry event
-type TelemetryEvent struct {
-	ID         string                 `json:"id"`
-	Name       string                 `json:"name"`
-	Properties map[string]interface{} `json:"properties"`
-	Context    TelemetryContext       `json:"context"`
-	Timestamp  time.Time              `json:"timestamp"`
+// TelemetryRequest is a single CLI telemetry event. It mirrors the
+// `TelemetryRequest` schema in the OpenAPI spec (the contract of record): one
+// flat event per request. Batching is intentionally unsupported — reintroducing
+// it must be a deliberate spec change, not a silent divergence.
+type TelemetryRequest struct {
+	Version     string   `json:"version"`
+	OS          string   `json:"os"`
+	Arch        string   `json:"arch"`
+	Command     string   `json:"command"`
+	Duration    int64    `json:"duration"`
+	Success     bool     `json:"success"`
+	ErrorType   string   `json:"error_type,omitempty"`
+	Features    []string `json:"features,omitempty"`
+	AnonymousID string   `json:"anonymous_id"`
 }
 
-// TelemetryContext contains context information for telemetry
-type TelemetryContext struct {
-	OS          string `json:"os"`
-	Arch        string `json:"arch"`
-	Version     string `json:"version"`
-	CI          bool   `json:"ci"`
-	SessionID   string `json:"session_id"`
-	AnalyticsID string `json:"analytics_id,omitempty"`
-}
-
-// TelemetryBatchRequest represents a batch of telemetry events
-type TelemetryBatchRequest struct {
-	Events []TelemetryEvent `json:"events"`
-}
-
-// TelemetryResponse represents the response from telemetry submission
+// TelemetryResponse is the server's acknowledgement.
 type TelemetryResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message,omitempty"`
 }
 
-// SendEvent sends a single telemetry event
-func (s *TelemetryService) SendEvent(ctx context.Context, event TelemetryEvent) (*http.Response, error) {
-	return s.SendBatch(ctx, []TelemetryEvent{event})
-}
-
-// SendBatch sends a batch of telemetry events
-func (s *TelemetryService) SendBatch(ctx context.Context, events []TelemetryEvent) (*http.Response, error) {
-	u := "/api/v1/cli/telemetry"
-
-	req, err := s.client.NewRequest(ctx, "POST", u, TelemetryBatchRequest{Events: events})
+// Send submits a single telemetry event to POST /api/v1/cli/telemetry,
+// HMAC-signing the request when the client was configured with a telemetry
+// secret. Telemetry is best-effort; callers typically ignore the error.
+func (s *TelemetryService) Send(ctx context.Context, event TelemetryRequest) (*http.Response, error) {
+	body, err := json.Marshal(event)
 	if err != nil {
 		return nil, err
 	}
 
-	// Add CLI version header if available
-	if version := ctx.Value("cli-version"); version != nil {
-		req.Header.Set("X-CLI-Version", fmt.Sprintf("%v", version))
-	}
-
-	var telemetryResp TelemetryResponse
-	resp, err := s.client.Do(ctx, req, &telemetryResp)
+	// Build via the shared request path (base URL, default headers, auth), then
+	// attach the exact body bytes we sign so the server's HMAC over the raw body
+	// matches byte-for-byte (NewRequest's json.Encoder would append a newline).
+	req, err := s.client.NewRequest(ctx, http.MethodPost, "/api/v1/cli/telemetry", nil)
 	if err != nil {
-		return resp, err
+		return nil, err
 	}
 
-	return resp, nil
-}
-
-// TrackCommand tracks a CLI command execution
-func (s *TelemetryService) TrackCommand(ctx context.Context, command string, duration time.Duration, success bool, properties map[string]interface{}) (*http.Response, error) {
-	if properties == nil {
-		properties = make(map[string]interface{})
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(body)), nil
 	}
+	req.Header.Set("Content-Type", "application/json")
 
-	properties["command"] = command
-	properties["duration"] = duration.Milliseconds()
-	properties["success"] = success
+	s.client.signTelemetry(req, body)
 
-	event := TelemetryEvent{
-		Name:       "cli.command",
-		Properties: properties,
-		Timestamp:  time.Now(),
-	}
-
-	return s.SendEvent(ctx, event)
-}
-
-// TrackError tracks a CLI error
-func (s *TelemetryService) TrackError(ctx context.Context, command string, errorType string, properties map[string]interface{}) (*http.Response, error) {
-	if properties == nil {
-		properties = make(map[string]interface{})
-	}
-
-	properties["command"] = command
-	properties["error_type"] = errorType
-
-	event := TelemetryEvent{
-		Name:       "cli.error",
-		Properties: properties,
-		Timestamp:  time.Now(),
-	}
-
-	return s.SendEvent(ctx, event)
-}
-
-// TrackFeatureUsage tracks feature usage
-func (s *TelemetryService) TrackFeatureUsage(ctx context.Context, feature string, properties map[string]interface{}) (*http.Response, error) {
-	if properties == nil {
-		properties = make(map[string]interface{})
-	}
-
-	properties["feature"] = feature
-
-	event := TelemetryEvent{
-		Name:       "cli.feature_usage",
-		Properties: properties,
-		Timestamp:  time.Now(),
-	}
-
-	return s.SendEvent(ctx, event)
+	var resp TelemetryResponse
+	return s.client.Do(ctx, req, &resp)
 }
