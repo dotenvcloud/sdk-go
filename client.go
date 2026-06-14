@@ -3,13 +3,17 @@ package dotenv
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -67,6 +71,11 @@ type Client struct {
 	organization string   // Organization context (ULID)
 	httpClient   *http.Client
 	userAgent    string
+
+	// telemetrySecret HMAC-signs CLI telemetry requests (X-Telemetry-Signature).
+	// Embedded in the CLI at build time; empty in normal SDK use, in which case
+	// telemetry is sent unsigned.
+	telemetrySecret string
 
 	// Service endpoints
 	Organizations  *OrganizationsService
@@ -136,6 +145,17 @@ func WithBearerToken(token string) ClientOption {
 func WithOrganization(organization string) ClientOption {
 	return func(c *Client) {
 		c.organization = organization
+	}
+}
+
+// WithTelemetrySecret sets the shared secret used to HMAC-sign CLI telemetry
+// requests. The CLI embeds it at build time (ldflags). NOTE: this is anti-abuse
+// hardening, not authentication — a publicly distributed binary's embedded
+// secret is extractable, so it only raises the cost of casual forgery. Empty
+// secret ⇒ telemetry is sent unsigned.
+func WithTelemetrySecret(secret string) ClientOption {
+	return func(c *Client) {
+		c.telemetrySecret = secret
 	}
 }
 
@@ -231,6 +251,28 @@ func (c *Client) NewRequest(ctx context.Context, method, urlStr string, body int
 	}
 
 	return req, nil
+}
+
+// signTelemetry attaches X-Telemetry-Timestamp + X-Telemetry-Signature so the
+// server can verify the request came from a build carrying the shared secret.
+// It signs "{timestamp}.{body}" with HMAC-SHA256 over the exact bytes that go
+// on the wire. No-op when no secret is configured. The server's matching check
+// lives in the VerifyTelemetrySignature middleware.
+func (c *Client) signTelemetry(req *http.Request, body []byte) {
+	if c.telemetrySecret == "" {
+		return
+	}
+
+	// The timestamp is fixed at first signing and reused on any network-error
+	// retry (Do clones the request with these headers intact), so the signature
+	// stays valid across attempts. A retry that outlives the server's skew
+	// window would be rejected as stale — acceptable for best-effort telemetry.
+	ts := strconv.FormatInt(time.Now().Unix(), 10)
+	mac := hmac.New(sha256.New, []byte(c.telemetrySecret))
+	mac.Write([]byte(ts + "." + string(body)))
+
+	req.Header.Set("X-Telemetry-Timestamp", ts)
+	req.Header.Set("X-Telemetry-Signature", hex.EncodeToString(mac.Sum(nil)))
 }
 
 // Do executes an API request
