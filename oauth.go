@@ -27,6 +27,12 @@ type OAuthTokenRefreshRequest struct {
 	ClientID     string `json:"client_id"`     // OAuth client ID
 }
 
+// OAuthTokenRevokeRequest represents the token revocation request (RFC 7009)
+type OAuthTokenRevokeRequest struct {
+	Token    string `json:"token"`     // The refresh token to revoke
+	ClientID string `json:"client_id"` // OAuth client ID
+}
+
 // OAuthTokenResponse represents the OAuth token response
 type OAuthTokenResponse struct {
 	AccessToken  string `json:"access_token"`
@@ -72,6 +78,41 @@ func (s *OAuthService) ExchangeToken(ctx context.Context, req OAuthTokenAuthCode
 	}
 
 	return &tokenResp, resp, nil
+}
+
+// RevokeToken revokes a token (RFC 7009). It accepts the refresh token; because
+// the access and refresh tokens share a single server-side record, revoking
+// invalidates both. The endpoint is possession-based (no authentication) and
+// returns 200 even when no matching token exists.
+func (s *OAuthService) RevokeToken(ctx context.Context, refreshToken string, clientID string) (*http.Response, error) {
+	u := "/api/oauth/revoke"
+
+	req := OAuthTokenRevokeRequest{
+		Token:    refreshToken,
+		ClientID: clientID,
+	}
+
+	httpReq, err := s.client.NewRequest(ctx, "POST", u, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// OAuth revoke endpoint doesn't require authentication
+	httpReq.Header.Del("Authorization")
+
+	resp, err := s.client.Do(ctx, httpReq, nil)
+	if err != nil {
+		// Check if it's an OAuth error
+		if resp != nil && resp.StatusCode >= 400 {
+			var oauthErr OAuthErrorResponse
+			if jsonErr := parseJSONResponse(resp, &oauthErr); jsonErr == nil && oauthErr.Error != "" {
+				return resp, fmt.Errorf("oauth error: %s - %s", oauthErr.Error, oauthErr.ErrorDescription)
+			}
+		}
+		return resp, err
+	}
+
+	return resp, nil
 }
 
 // RefreshToken uses a refresh token to get a new access token

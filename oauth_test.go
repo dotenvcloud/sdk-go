@@ -229,6 +229,86 @@ func TestOAuthService_RefreshToken(t *testing.T) {
 	}
 }
 
+func TestOAuthService_RevokeToken(t *testing.T) {
+	tests := []struct {
+		name           string
+		refreshToken   string
+		clientID       string
+		mockStatusCode int
+		wantErr        bool
+		checkError     func(t *testing.T, err error)
+	}{
+		{
+			name:           "successful revoke",
+			refreshToken:   "test-refresh-token",
+			clientID:       "test-client",
+			mockStatusCode: http.StatusOK,
+			wantErr:        false,
+		},
+		{
+			name:           "unknown token still 200",
+			refreshToken:   "unknown-refresh-token",
+			clientID:       "test-client",
+			mockStatusCode: http.StatusOK,
+			wantErr:        false,
+		},
+		{
+			name:           "invalid request returns error",
+			refreshToken:   "test-refresh-token",
+			clientID:       "bad-client",
+			mockStatusCode: http.StatusBadRequest,
+			wantErr:        true,
+			checkError: func(t *testing.T, err error) {
+				assert.Contains(t, err.Error(), "400")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/api/oauth/revoke", r.URL.Path)
+				assert.Equal(t, "POST", r.Method)
+				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+				// Parse JSON body
+				var reqBody dotenv.OAuthTokenRevokeRequest
+				err := json.NewDecoder(r.Body).Decode(&reqBody)
+				require.NoError(t, err)
+
+				// Verify request parameters
+				assert.Equal(t, tt.refreshToken, reqBody.Token)
+				assert.Equal(t, tt.clientID, reqBody.ClientID)
+
+				// Send response (revoke returns an empty body)
+				w.WriteHeader(tt.mockStatusCode)
+			}))
+			defer server.Close()
+
+			client := dotenv.NewClient(
+				dotenv.WithBaseURL(server.URL),
+			)
+
+			resp, err := client.OAuth.RevokeToken(
+				context.Background(),
+				tt.refreshToken,
+				tt.clientID,
+			)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.checkError != nil {
+					tt.checkError(t, err)
+				}
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, resp)
+				assert.Equal(t, http.StatusOK, resp.StatusCode)
+			}
+		})
+	}
+}
+
 func TestOAuthService_ContextCancellation(t *testing.T) {
 	// Test context cancellation for ExchangeToken
 	t.Run("ExchangeToken context cancellation", func(t *testing.T) {
